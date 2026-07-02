@@ -1,15 +1,61 @@
-import express from "express";
+import express, { Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import { authRouter } from "./routes/auth.js";
+import { cookiePassword } from "./workos.js";
 
-export const app = express();
+export const app: Express = express();
 
+// Security middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  credentials: true, // Required for cookies
+}));
+
+// Body parsing
 app.use(express.json());
 
+// Cookie parsing with secret for signed cookies
+if (!cookiePassword) {
+  throw new Error("WORKOS_COOKIE_PASSWORD environment variable is required (32+ characters)");
+}
+app.use(cookieParser(cookiePassword));
+
+// Health check endpoint
 app.get("/health", (_req, res) => {
   res.status(200).json({
     status: "ok",
+  });
+});
+
+// Auth routes (/auth/login, /auth/callback, /auth/logout, /auth/me)
+app.use("/auth", authRouter);
+
+// Home route - shows auth status
+app.get("/", (req, res) => {
+  const sessionCookie = req.signedCookies.workos_session;
+
+  if (sessionCookie) {
+    try {
+      const session = JSON.parse(sessionCookie);
+      res.json({
+        authenticated: true,
+        user: session.user,
+        loginUrl: null,
+        logoutUrl: "/auth/logout",
+      });
+      return;
+    } catch {
+      // Invalid session, fall through to unauthenticated response
+    }
+  }
+
+  res.json({
+    authenticated: false,
+    user: null,
+    loginUrl: "/auth/login",
+    logoutUrl: null,
   });
 });
