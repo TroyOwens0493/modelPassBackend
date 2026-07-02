@@ -26,4 +26,13 @@ app.post("/api/test", async (req, res) => {
 
 app.listen(3000, () => {
   console.log("Backend running on http://localhost:3000");
+import "dotenv/config";
+import { app } from "./app.js";
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Login: http://localhost:${PORT}/auth/login`);
 });
