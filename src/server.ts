@@ -9,6 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
 const client = new MongoClient(process.env.MONGODB_URI!);
 await client.connect();
 
@@ -23,13 +25,6 @@ app.post("/api/test", async (req, res) => {
   const result = await db.collection("test").insertOne(req.body);
   res.json(result);
 });
-
-app.listen(3000, () => {
-  console.log("Backend running on http://localhost:3000");
-import "dotenv/config";
-import { app } from "./app.js";
-
-const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
