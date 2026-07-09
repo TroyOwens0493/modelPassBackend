@@ -54,29 +54,17 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
     return res.json(chat);
 });
 
-chatsRouter.post("/:chatId", async (req: Request, res: Response) => {
-    const { chatId } = req.params;
-    const { newMsg } = req.body;
+// Get a response from the model.
+// Todo: stream the response in the future.
+chatsRouter.post("/response", async (req: Request, res: Response) => {
+    const { messages } = req.body;
 
-    if (typeof chatId !== "string" || !ObjectId.isValid(chatId)) {
-        return res.status(404).json({ error: "Not found" });
-    }
-
-    const chat = await chatsDb.findOne({ _id: new ObjectId(chatId) });
-
-    if (!chat) {
-        return res.status(404).json({ error: "Not found" });
-    }
-
-    const history = chat.messages as ChatMessage[];
-    const newChatWithHistory = history.push(newMsg);
-
-    const allMsgs = newChatWithHistory.map((msg: ChatMessage) => {
-        return { role, text };
+    const allMsgs = messages.map((msg: ChatMessage) => {
+        return { role: msg.role, text: msg.text };
     });
 
     const completion = await client.chat.send({
-        model: '~openai/gpt-latest',
+        model: chat.model,
         messages: allMsgs,
     });
 
