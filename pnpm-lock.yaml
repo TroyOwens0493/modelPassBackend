@@ -207,6 +207,9 @@ importers:
 
   .:
     dependencies:
+      '@openrouter/sdk':
+        specifier: ^0.13.31
+        version: 0.13.31
       '@workos-inc/node':
         specifier: ^10.4.0
         version: 10.4.0
@@ -409,6 +412,9 @@ packages:
   '@mongodb-js/saslprep@1.4.11':
     resolution: {integrity: sha512-o9rAHc0IpIjuPSxRutWpE1F62x7n+4mVS4rCNHkzhIUMQcc18bb6xEq5wd2NdN0WjepIyXIppRshYI2kQDOZVA==}
 
+  '@openrouter/sdk@0.13.31':
+    resolution: {integrity: sha512-sv7y+OlTMJDexa1AzMDUx6XY9ScGioWcMCMs66ILfa4iUOMliOmiO5UIpUCueTQjjD+qIze9jMv5uDbYU/IPnA==}
+
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
 
@@ -452,6 +458,7 @@ packages:
 
   '@types/whatwg-url@13.0.0':
     resolution: {integrity: sha512-N8WXpbE6Wgri7KUSvrmQcqrMllKZ9uxkYWMt+mCSGwNc0Hsw9VQTW7ApqI4XNrx6/SaM2QQJCzMPDEXE058s+Q==}
+
   '@workos-inc/node@10.4.0':
     resolution: {integrity: sha512-mrrjFYQsYGbY/rGLqUN9IIwzoCa3aIg9gXViIRpzfXkH2mozJ1NBcxSivN3SpqLgoGDuyp3Wg3Mg5UgTJU4FYQ==}
     engines: {node: '>=22.11.0'}
@@ -817,6 +824,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@esbuild/aix-ppc64@0.28.1':
@@ -901,6 +911,10 @@ snapshots:
     dependencies:
       sparse-bitfield: 3.0.3
 
+  '@openrouter/sdk@0.13.31':
+    dependencies:
+      zod: 4.4.3
+
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
@@ -955,6 +969,7 @@ snapshots:
   '@types/whatwg-url@13.0.0':
     dependencies:
       '@types/webidl-conversions': 7.0.3
+
   '@workos-inc/node@10.4.0': {}
 
   accepts@2.0.0:
@@ -1342,3 +1357,5 @@ snapshots:
       webidl-conversions: 7.0.0
 
   wrappy@1.0.2: {}
+
+  zod@4.4.3: {}
