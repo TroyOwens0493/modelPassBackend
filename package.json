@@ -8,6 +8,7 @@
     "start": "tsx --env-file=.env.local src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run unit-tests",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "keywords": [],
@@ -29,7 +30,8 @@
     "express": "^5.2.1",
     "helmet": "^8.2.0",
     "mongodb": "^7.3.0",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "vitest": "^4.1.10"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
