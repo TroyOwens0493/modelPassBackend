@@ -25,8 +25,3 @@ export interface CreateChatBody {
     title: string;
     model: string;
 }
-
-export interface AddChatMessageBody {
-    issuer: ChatRole;
-    text: string;
-}

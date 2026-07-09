@@ -71,5 +71,31 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
     return res.json(completion);
 });
 
-chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
+// Append a message to the db chat history
+chatsRouter.post("/addMessage/:chatId", async (req: Request, res: Response) => {
+    const { chatId } = req.params;
+    const msg = req.body as ChatMessage;
+
+    if (typeof chatId !== "string" || !ObjectId.isValid(chatId)) {
+        return res.status(404).json({ error: "Not found" });
+    }
+
+    if (!["user", "model", "system"].includes(msg.role) || typeof msg.text !== "string" || msg.text.trim().length === 0) {
+        return res.status(400).json({ error: "Invalid message" });
+    }
+
+    const updatedChat = await chatsDb.findOneAndUpdate(
+        { _id: new ObjectId(chatId) },
+        {
+            $push: { messages: msg },
+            $set: { updatedAt: new Date() },
+        },
+        { returnDocument: "after" },
+    );
+
+    if (!updatedChat) {
+        return res.status(404).json({ error: "Not found" });
+    }
+
+    return res.json(updatedChat);
 });
