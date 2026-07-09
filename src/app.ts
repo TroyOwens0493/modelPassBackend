@@ -4,6 +4,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
 import { chatsRouter } from "./routes/chats/chats.js";
+import { requireAuth } from "./middleware/requireAuth.js";
 import { cookiePassword } from "./workos.js";
 
 export const app: Express = express();
@@ -35,7 +36,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 
 // Chat routes (/chats, /chats/:chatId, /chats/:chatId/messages)
-app.use("/chats", chatsRouter);
+app.use("/chats", requireAuth, chatsRouter);
 
 // Home route - shows auth status
 app.get("/", (req, res) => {
