@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
+import { billingRouter } from "./routes/billing.js";
 import { cookiePassword } from "./workos.js";
 
 export const app: Express = express();
@@ -10,7 +11,7 @@ export const app: Express = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
   credentials: true, // Required for cookies
 }));
 
@@ -32,6 +33,9 @@ app.get("/health", (_req, res) => {
 
 // Auth routes (/auth/login, /auth/callback, /auth/logout, /auth/me)
 app.use("/auth", authRouter);
+
+// Billing routes. Checkout remains disabled until Polar credentials are supplied.
+app.use("/api/billing", billingRouter);
 
 // Home route - shows auth status
 app.get("/", (req, res) => {

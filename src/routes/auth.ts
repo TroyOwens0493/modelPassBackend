@@ -84,8 +84,9 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
       signed: true,
     });
 
-    // Redirect to home or dashboard after successful login
-    res.redirect("/");
+    // Return to the frontend after successful login.
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    res.redirect(`${frontendUrl}/credits`);
   } catch (error) {
     console.error("Error authenticating with WorkOS:", error);
     res.status(500).json({ error: "Authentication failed" });
