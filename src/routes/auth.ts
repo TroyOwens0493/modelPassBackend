@@ -23,22 +23,50 @@ declare global {
 
 export const authRouter: RouterType = Router();
 
+function buildAuthUrl(screenHint?: string) {
+  const options: {
+    provider: string;
+    redirectUri: string;
+    clientId: string;
+    screenHint?: string;
+  } = {
+    provider: "authkit",
+    redirectUri,
+    clientId,
+  };
+
+  if (screenHint) {
+    options.screenHint = screenHint;
+  }
+
+  return workos.userManagement.getAuthorizationUrl(options);
+}
+
 /**
  * GET /auth/login
  * Redirects user to WorkOS AuthKit for authentication
  */
 authRouter.get("/login", async (_req: Request, res: Response) => {
   try {
-    const authorizationUrl = workos.userManagement.getAuthorizationUrl({
-      provider: "authkit",
-      redirectUri,
-      clientId,
-    });
-
+    const authorizationUrl = buildAuthUrl();
     res.redirect(authorizationUrl);
   } catch (error) {
     console.error("Error generating authorization URL:", error);
     res.status(500).json({ error: "Failed to initiate login" });
+  }
+});
+
+/**
+ * GET /auth/signup
+ * Redirects user to WorkOS AuthKit with signup screen hint.
+ */
+authRouter.get("/signup", async (_req: Request, res: Response) => {
+  try {
+    const authorizationUrl = buildAuthUrl("signup");
+    res.redirect(authorizationUrl);
+  } catch (error) {
+    console.error("Error generating signup authorization URL:", error);
+    res.status(500).json({ error: "Failed to initiate signup" });
   }
 });
 
@@ -98,14 +126,10 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
  */
 authRouter.post("/logout", async (req: Request, res: Response) => {
   try {
-    // Get session to retrieve the session ID for WorkOS logout
     const sessionCookie = req.signedCookies.workos_session;
-
-    // Clear the session cookie
     res.clearCookie("workos_session");
 
     if (sessionCookie) {
-      // Optionally get the WorkOS logout URL to revoke the session server-side
       const logoutUrl = workos.userManagement.getLogoutUrl({
         sessionId: JSON.parse(sessionCookie).accessToken,
       });
@@ -117,7 +141,6 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
     res.redirect("/");
   } catch (error) {
     console.error("Error during logout:", error);
-    // Even if logout fails server-side, clear the cookie and redirect
     res.clearCookie("workos_session");
     res.redirect("/");
   }
