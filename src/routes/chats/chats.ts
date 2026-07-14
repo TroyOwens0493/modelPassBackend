@@ -87,6 +87,13 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         role: msg.role === "model" ? "assistant" : msg.role,
         content: msg.text,
     }));
+    const abortController = new AbortController();
+
+    res.once("close", () => {
+        if (!res.writableEnded) {
+            abortController.abort();
+        }
+    });
 
     try {
         const completion = await client.chat.send({
@@ -95,7 +102,7 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
                 messages: allMsgs,
                 stream: true
             },
-        });
+        }, { signal: abortController.signal });
 
         res.status(200);
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
