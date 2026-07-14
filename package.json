@@ -30,6 +30,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "helmet": "^8.2.0",
+    "jose": "^6.2.3",
     "mongodb": "^7.3.0"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
+import { decodeJwt } from "jose";
 import { workos, clientId, redirectUri } from "../workos.js";
 
 // Extend Express Request to include session
@@ -16,6 +17,7 @@ declare global {
         };
         accessToken?: string;
         refreshToken?: string;
+        sessionId?: string;
       };
     }
   }
@@ -82,6 +84,11 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
         code,
         clientId,
       });
+    const { sid: sessionId } = decodeJwt(accessToken);
+
+    if (!sessionId) {
+      throw new Error("WorkOS access token did not include a session ID");
+    }
 
     // Store session data in a secure cookie
     const sessionData = {
@@ -94,6 +101,7 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
       },
       accessToken,
       refreshToken,
+      sessionId,
     };
 
     // Set session cookie (httpOnly, secure in production)
@@ -113,11 +121,7 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /auth/logout
- * Clears the session cookie and logs out the user
- */
-authRouter.post("/logout", async (req: Request, res: Response) => {
+async function logout(req: Request, res: Response) {
   try {
     const sessionCookie = req.signedCookies.workos_session;
 
@@ -126,35 +130,28 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
     if (sessionCookie) {
-      res.redirect(`${frontendUrl}/login`);
-      return;
+      const { sessionId } = JSON.parse(sessionCookie) as { sessionId?: string };
+
+      if (sessionId) {
+        res.redirect(workos.userManagement.getLogoutUrl({ sessionId, returnTo: frontendUrl }));
+        return;
+      }
     }
 
-    res.redirect(`${frontendUrl}/login`);
+    res.redirect(frontendUrl);
   } catch (error) {
     console.error("Error during logout:", error);
     res.clearCookie("workos_session");
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    res.redirect(`${frontendUrl}/login`);
+    res.redirect(frontendUrl);
   }
-});
+}
 
 /**
- * GET /auth/logout
- * Alternative GET endpoint for logout (for simple link-based logout)
+ * Clears the local cookie, ends the WorkOS session, and returns to the frontend.
  */
-authRouter.get("/logout", async (req: Request, res: Response) => {
-  try {
-    res.clearCookie("workos_session");
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    res.redirect(`${frontendUrl}/login`);
-  } catch (error) {
-    console.error("Error during logout:", error);
-    res.clearCookie("workos_session");
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    res.redirect(`${frontendUrl}/login`);
-  }
-});
+authRouter.post("/logout", logout);
+authRouter.get("/logout", logout);
 
 /**
  * GET /auth/me
