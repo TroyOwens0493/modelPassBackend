@@ -15,22 +15,33 @@ const client = new OpenRouter({
     appTitle: 'Model Pass'
 });
 
+/** Builds a query that limits a chat ID to the authenticated owner. */
+function getOwnedChatFilter(req: Request) {
+    const { chatId } = req.params;
+    const userId = req.session?.user?.id;
+
+    if (typeof chatId !== "string" || !ObjectId.isValid(chatId) || !userId) {
+        return null;
+    }
+
+    return { _id: new ObjectId(chatId), userId };
+}
+
 chatsRouter.get("/", (_req: Request, res: Response) => {
     res.status(404).json({ error: "Not found" });
 });
 
-// Returns the ids and titles for every chat owned by the given numeric user id.
+// Returns the ids and titles for every chat owned by the authenticated user.
 chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
     const { userId } = req.params;
-    const parsedUserId = Number(userId);
 
-    if (typeof userId !== "string" || !Number.isInteger(parsedUserId)) {
-        return res.status(400).json({ error: "Invalid userId" });
+    if (typeof userId !== "string" || userId !== req.session?.user?.id) {
+        return res.status(404).json({ error: "Not found" });
     }
 
     const chatsDb = chatsCollection();
     const chats = await chatsDb
-        .find({ userId: parsedUserId })
+        .find({ userId })
         .project<{ _id: ObjectId; title: string }>({ _id: 1, title: 1 })
         .toArray();
 
@@ -39,14 +50,14 @@ chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
 
 // Returns the full chat document for the given Mongo chat _id.
 chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
-    const { chatId } = req.params;
+    const chatFilter = getOwnedChatFilter(req);
 
-    if (typeof chatId !== "string" || !ObjectId.isValid(chatId)) {
+    if (!chatFilter) {
         return res.status(404).json({ error: "Not found" });
     }
 
     const chatsDb = chatsCollection();
-    const chat = await chatsDb.findOne({ _id: new ObjectId(chatId) });
+    const chat = await chatsDb.findOne(chatFilter);
 
     if (!chat) {
         return res.status(404).json({ error: "Not found" });
@@ -80,10 +91,10 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
 
 // Append a message to the db chat history
 chatsRouter.post("/addMessage/:chatId", async (req: Request, res: Response) => {
-    const { chatId } = req.params;
+    const chatFilter = getOwnedChatFilter(req);
     const msg = req.body as ChatMessage;
 
-    if (typeof chatId !== "string" || !ObjectId.isValid(chatId)) {
+    if (!chatFilter) {
         return res.status(404).json({ error: "Not found" });
     }
 
@@ -93,7 +104,7 @@ chatsRouter.post("/addMessage/:chatId", async (req: Request, res: Response) => {
 
     const chatsDb = chatsCollection();
     const updatedChat = await chatsDb.findOneAndUpdate(
-        { _id: new ObjectId(chatId) },
+        chatFilter,
         {
             $push: { messages: msg },
             $set: { updatedAt: new Date() },
