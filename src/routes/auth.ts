@@ -175,3 +175,41 @@ authRouter.get("/me", (req: Request, res: Response) => {
     res.status(401).json({ error: "Invalid session", user: null });
   }
 });
+
+authRouter.patch("/me", (req: Request, res: Response) => {
+  const sessionCookie = req.signedCookies.workos_session;
+
+  if (!sessionCookie) {
+    res.status(401).json({ error: "Not authenticated", user: null });
+    return;
+  }
+
+  try {
+    const session = JSON.parse(sessionCookie);
+    const { name, replyStyle, defaultModel } = req.body as {
+      name?: string;
+      replyStyle?: string;
+      defaultModel?: string;
+    };
+
+    const updatedUser = {
+      ...session.user,
+      name: name?.trim() || session.user.firstName || session.user.email,
+      replyStyle: replyStyle ?? session.user.replyStyle ?? "balanced",
+      defaultModel: defaultModel ?? session.user.defaultModel ?? "openai/gpt-4o-mini",
+    };
+
+    session.user = updatedUser;
+    res.cookie("workos_session", JSON.stringify(session), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      signed: true,
+    });
+
+    res.json({ user: updatedUser });
+  } catch {
+    res.status(400).json({ error: "Unable to update profile" });
+  }
+});
