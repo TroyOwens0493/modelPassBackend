@@ -9,10 +9,13 @@ import { cookiePassword } from "./workos.js";
 
 export const app: Express = express();
 
+const allowedOrigins = [process.env.CORS_ORIGIN, "http://localhost:5173", "http://localhost:3000"]
+  .filter(Boolean) as string[];
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: allowedOrigins,
   credentials: true, // Required for cookies
 }));
 
