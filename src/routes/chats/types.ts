@@ -10,7 +10,7 @@ export interface ChatMessage {
 
 export interface ChatDocument {
     _id?: ObjectId;
-    userId: number;
+    userId: string;
     title: string;
     model: string;
     messages: ChatMessage[];
@@ -21,7 +21,7 @@ export interface ChatDocument {
 }
 
 export interface CreateChatBody {
-    userId: number;
+    userId: string;
     title: string;
     model: string;
 }
