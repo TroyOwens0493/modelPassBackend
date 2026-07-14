@@ -71,8 +71,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
     return res.json(chat);
 });
 
-// Get a response from the model.
-// Todo: stream the response in the future.
+// Stream a response from the model as plain UTF-8 text.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
     const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
 
@@ -94,12 +93,35 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
             chatRequest: {
                 model,
                 messages: allMsgs,
+                stream: true
             },
         });
 
-        return res.json(completion);
+        res.status(200);
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.flushHeaders();
+
+        for await (const chunk of completion) {
+            if (res.destroyed) {
+                break;
+            }
+
+            const content = chunk.choices[0]?.delta?.content;
+            if (content) {
+                res.write(content);
+            }
+        }
+
+        return res.end();
     } catch (error) {
         console.error("OpenRouter request failed:", error);
+
+        if (res.headersSent) {
+            return res.end();
+        }
+
         return res.status(502).json({ error: "Unable to get a response from the model" });
     }
 });
