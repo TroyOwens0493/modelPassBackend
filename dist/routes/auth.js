@@ -11,12 +11,32 @@ authRouter.get("/login", async (_req, res) => {
             provider: "authkit",
             redirectUri,
             clientId,
+            screenHint: "sign-in",
         });
         res.redirect(authorizationUrl);
     }
     catch (error) {
         console.error("Error generating authorization URL:", error);
         res.status(500).json({ error: "Failed to initiate login" });
+    }
+});
+/**
+ * GET /auth/signup
+ * Redirects user to WorkOS AuthKit with the sign-up screen enabled.
+ */
+authRouter.get("/signup", async (_req, res) => {
+    try {
+        const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+            provider: "authkit",
+            redirectUri,
+            clientId,
+            screenHint: "sign-up",
+        });
+        res.redirect(authorizationUrl);
+    }
+    catch (error) {
+        console.error("Error generating sign-up authorization URL:", error);
+        res.status(500).json({ error: "Failed to initiate sign-up" });
     }
 });
 /**
@@ -55,8 +75,8 @@ authRouter.get("/callback", async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             signed: true,
         });
-        // Redirect to home or dashboard after successful login
-        res.redirect("/");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        res.redirect(`${frontendUrl}/chat`);
     }
     catch (error) {
         console.error("Error authenticating with WorkOS:", error);
@@ -69,25 +89,20 @@ authRouter.get("/callback", async (req, res) => {
  */
 authRouter.post("/logout", async (req, res) => {
     try {
-        // Get session to retrieve the session ID for WorkOS logout
         const sessionCookie = req.signedCookies.workos_session;
-        // Clear the session cookie
         res.clearCookie("workos_session");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         if (sessionCookie) {
-            // Optionally get the WorkOS logout URL to revoke the session server-side
-            const logoutUrl = workos.userManagement.getLogoutUrl({
-                sessionId: JSON.parse(sessionCookie).accessToken,
-            });
-            res.redirect(logoutUrl);
+            res.redirect(`${frontendUrl}/login`);
             return;
         }
-        res.redirect("/");
+        res.redirect(`${frontendUrl}/login`);
     }
     catch (error) {
         console.error("Error during logout:", error);
-        // Even if logout fails server-side, clear the cookie and redirect
         res.clearCookie("workos_session");
-        res.redirect("/");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        res.redirect(`${frontendUrl}/login`);
     }
 });
 /**
@@ -97,12 +112,14 @@ authRouter.post("/logout", async (req, res) => {
 authRouter.get("/logout", async (req, res) => {
     try {
         res.clearCookie("workos_session");
-        res.redirect("/");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        res.redirect(`${frontendUrl}/login`);
     }
     catch (error) {
         console.error("Error during logout:", error);
         res.clearCookie("workos_session");
-        res.redirect("/");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        res.redirect(`${frontendUrl}/login`);
     }
 });
 /**

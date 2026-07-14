@@ -5,10 +5,12 @@ import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
 import { cookiePassword } from "./workos.js";
 export const app = express();
+const allowedOrigins = [process.env.CORS_ORIGIN, "http://localhost:5173", "http://localhost:3000"]
+    .filter(Boolean);
 // Security middleware
 app.use(helmet());
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: allowedOrigins,
     credentials: true, // Required for cookies
 }));
 // Body parsing
