@@ -58,14 +58,20 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
 // Get a response from the model.
 // Todo: stream the response in the future.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
-    const { messages } = req.body;
+    const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
 
-    const allMsgs = messages.map((msg: ChatMessage) => {
-        return { role: msg.role, text: msg.text };
-    });
+    if (typeof model !== "string" || model.trim().length === 0) {
+        return res.status(400).json({ error: "Invalid model" });
+    }
+
+    if (!Array.isArray(messages)) {
+        return res.status(400).json({ error: "Invalid messages" });
+    }
+
+    const allMsgs = messages.map((msg) => ({ role: msg.role, text: msg.text }));
 
     const completion = await client.chat.send({
-        model: chat.model,
+        model,
         messages: allMsgs,
     });
 
