@@ -8,7 +8,6 @@ import type { ChatMessage } from "./types.js";
 export const chatsRouter: RouterType = Router();
 
 const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_KEY;
-const chatsDb = chatsCollection();
 
 const client = new OpenRouter({
     apiKey: OPEN_ROUTER_KEY,
@@ -29,6 +28,7 @@ chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid userId" });
     }
 
+    const chatsDb = chatsCollection();
     const chats = await chatsDb
         .find({ userId: parsedUserId })
         .project<{ _id: ObjectId; title: string }>({ _id: 1, title: 1 })
@@ -45,6 +45,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
         return res.status(404).json({ error: "Not found" });
     }
 
+    const chatsDb = chatsCollection();
     const chat = await chatsDb.findOne({ _id: new ObjectId(chatId) });
 
     if (!chat) {
@@ -84,6 +85,7 @@ chatsRouter.post("/addMessage/:chatId", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid message" });
     }
 
+    const chatsDb = chatsCollection();
     const updatedChat = await chatsDb.findOneAndUpdate(
         { _id: new ObjectId(chatId) },
         {
