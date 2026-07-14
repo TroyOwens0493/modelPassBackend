@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=.env.local src/server.ts",
-    "start": "tsx --env-file=.env.local src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "start": "tsx --env-file=.env src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -22,6 +22,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@openrouter/sdk": "^0.13.31",
     "@workos-inc/node": "^10.4.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
