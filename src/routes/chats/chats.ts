@@ -8,7 +8,11 @@ import type { ChatMessage } from "./types.js";
 
 export const chatsRouter: RouterType = Router();
 
-const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_KEY;
+const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_API_KEY;
+
+if (!OPEN_ROUTER_KEY) {
+    throw new Error("OPENROUTER_API_KEY environment variable is required");
+}
 
 const client = new OpenRouter({
     apiKey: OPEN_ROUTER_KEY,
@@ -85,14 +89,19 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         content: msg.text,
     }));
 
-    const completion = await client.chat.send({
-        chatRequest: {
-            model,
-            messages: allMsgs,
-        },
-    });
+    try {
+        const completion = await client.chat.send({
+            chatRequest: {
+                model,
+                messages: allMsgs,
+            },
+        });
 
-    return res.json(completion);
+        return res.json(completion);
+    } catch (error) {
+        console.error("OpenRouter request failed:", error);
+        return res.status(502).json({ error: "Unable to get a response from the model" });
+    }
 });
 
 // Append a message to the db chat history
