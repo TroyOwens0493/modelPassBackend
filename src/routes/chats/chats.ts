@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { ObjectId } from "mongodb";
 import { chatsCollection } from "./model.js";
 import { OpenRouter } from '@openrouter/sdk';
+import type { ChatMessages } from "@openrouter/sdk/models";
 import type { Router as RouterType } from "express";
 import type { ChatMessage } from "./types.js";
 
@@ -79,11 +80,16 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid messages" });
     }
 
-    const allMsgs = messages.map((msg) => ({ role: msg.role, text: msg.text }));
+    const allMsgs: ChatMessages[] = messages.map((msg) => ({
+        role: msg.role === "model" ? "assistant" : msg.role,
+        content: msg.text,
+    }));
 
     const completion = await client.chat.send({
-        model,
-        messages: allMsgs,
+        chatRequest: {
+            model,
+            messages: allMsgs,
+        },
     });
 
     return res.json(completion);
