@@ -3,6 +3,9 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
+import { billingRouter } from "./routes/billing.js";
+import { chatsRouter } from "./routes/chats/chats.js";
+import { requireAuth } from "./middleware/requireAuth.js";
 import { cookiePassword } from "./workos.js";
 export const app = express();
 const allowedOrigins = [process.env.CORS_ORIGIN, "http://localhost:5173", "http://localhost:3000"]
@@ -28,6 +31,10 @@ app.get("/health", (_req, res) => {
 });
 // Auth routes (/auth/login, /auth/callback, /auth/logout, /auth/me)
 app.use("/auth", authRouter);
+// Chat routes (/chats, /chats/:chatId, /chats/:chatId/messages)
+app.use("/chats", requireAuth, chatsRouter);
+// Billing routes (/api/billing, /api/billing/checkout)
+app.use("/api/billing", billingRouter);
 // Home route - shows auth status
 app.get("/", (req, res) => {
     const sessionCookie = req.signedCookies.workos_session;
