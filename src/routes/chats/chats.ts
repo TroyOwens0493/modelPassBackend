@@ -5,7 +5,12 @@ import { chatsCollection } from "./model.js";
 import { OpenRouter } from '@openrouter/sdk';
 import type { ChatMessages, ChatUsage } from "@openrouter/sdk/models";
 import type { Router as RouterType } from "express";
-import type { ChatMessage } from "./types.js";
+import type {
+    ChatDocument,
+    ChatMessage,
+    CreateChatBody,
+    UpdateChatBody,
+} from "./types.js";
 import {
     creditsForCost,
     finalizeCreditReservation,
@@ -180,8 +185,76 @@ function getOwnedChatFilter(req: Request) {
     return { _id: new ObjectId(chatId), userId };
 }
 
+/** Validates JSON messages and converts their timestamps for MongoDB. */
+function parseChatMessages(value: unknown): ChatMessage[] | null {
+    if (!Array.isArray(value) || value.length === 0) {
+        return null;
+    }
+
+    const messages: ChatMessage[] = [];
+
+    for (const candidate of value) {
+        if (
+            !candidate ||
+            typeof candidate !== "object" ||
+            !["user", "model", "system"].includes((candidate as ChatMessage).role) ||
+            typeof (candidate as ChatMessage).text !== "string" ||
+            (candidate as ChatMessage).text.trim().length === 0
+        ) {
+            return null;
+        }
+
+        const timestamp = new Date((candidate as ChatMessage).timestamp);
+        if (Number.isNaN(timestamp.getTime())) {
+            return null;
+        }
+
+        messages.push({
+            role: (candidate as ChatMessage).role,
+            text: (candidate as ChatMessage).text,
+            timestamp,
+        });
+    }
+
+    return messages;
+}
+
 chatsRouter.get("/", (_req: Request, res: Response) => {
     res.status(404).json({ error: "Not found" });
+});
+
+// Creates a completed chat snapshot for the authenticated user.
+chatsRouter.post("/", async (req: Request, res: Response) => {
+    const { title, model, messages: rawMessages } = req.body as CreateChatBody;
+    const userId = req.session?.user?.id;
+    const messages = parseChatMessages(rawMessages);
+
+    if (
+        !userId ||
+        typeof title !== "string" ||
+        title.trim().length === 0 ||
+        title.trim().length > 120 ||
+        typeof model !== "string" ||
+        model.trim().length === 0 ||
+        !messages
+    ) {
+        return res.status(400).json({ error: "Invalid chat" });
+    }
+
+    const now = new Date();
+    const chat: ChatDocument = {
+        userId,
+        title: title.trim(),
+        model: model.trim(),
+        messages,
+        tokensUsed: 0,
+        creditsUsed: 0,
+        createdAt: now,
+        updatedAt: now,
+    };
+    const result = await chatsCollection().insertOne(chat);
+
+    return res.status(201).json({ ...chat, _id: result.insertedId });
 });
 
 // Returns the ids and titles for every chat owned by the authenticated user.
@@ -195,7 +268,12 @@ chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
     const chatsDb = chatsCollection();
     const chats = await chatsDb
         .find({ userId })
-        .project<{ _id: ObjectId; title: string }>({ _id: 1, title: 1 })
+        .project<{ _id: ObjectId; title: string; updatedAt: Date }>({
+            _id: 1,
+            title: 1,
+            updatedAt: 1,
+        })
+        .sort({ updatedAt: -1 })
         .toArray();
 
     return res.json(chats);
@@ -217,6 +295,38 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
     }
 
     return res.json(chat);
+});
+
+// Replaces an owned chat's messages with the latest completed snapshot.
+chatsRouter.put("/:chatId", async (req: Request, res: Response) => {
+    const chatFilter = getOwnedChatFilter(req);
+    const { messages: rawMessages } = req.body as UpdateChatBody;
+    const messages = parseChatMessages(rawMessages);
+
+    if (!chatFilter) {
+        return res.status(404).json({ error: "Not found" });
+    }
+
+    if (!messages) {
+        return res.status(400).json({ error: "Invalid messages" });
+    }
+
+    const updatedChat = await chatsCollection().findOneAndUpdate(
+        chatFilter,
+        {
+            $set: {
+                messages,
+                updatedAt: new Date(),
+            },
+        },
+        { returnDocument: "after" },
+    );
+
+    if (!updatedChat) {
+        return res.status(404).json({ error: "Not found" });
+    }
+
+    return res.json(updatedChat);
 });
 
 // Stream a response from the model as plain UTF-8 text.
