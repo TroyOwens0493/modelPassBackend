@@ -8,7 +8,11 @@ import type { ChatMessage } from "./types.js";
 
 export const chatsRouter: RouterType = Router();
 
-const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_KEY;
+const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_API_KEY;
+
+if (!OPEN_ROUTER_KEY) {
+    throw new Error("OPENROUTER_API_KEY environment variable is required");
+}
 
 const client = new OpenRouter({
     apiKey: OPEN_ROUTER_KEY,
@@ -67,8 +71,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
     return res.json(chat);
 });
 
-// Get a response from the model.
-// Todo: stream the response in the future.
+// Stream a response from the model as plain UTF-8 text.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
     const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
 
@@ -84,15 +87,50 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         role: msg.role === "model" ? "assistant" : msg.role,
         content: msg.text,
     }));
+    const abortController = new AbortController();
 
-    const completion = await client.chat.send({
-        chatRequest: {
-            model,
-            messages: allMsgs,
-        },
+    res.once("close", () => {
+        if (!res.writableEnded) {
+            abortController.abort();
+        }
     });
 
-    return res.json(completion);
+    try {
+        const completion = await client.chat.send({
+            chatRequest: {
+                model,
+                messages: allMsgs,
+                stream: true
+            },
+        }, { signal: abortController.signal });
+
+        res.status(200);
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.flushHeaders();
+
+        for await (const chunk of completion) {
+            if (res.destroyed) {
+                break;
+            }
+
+            const content = chunk.choices[0]?.delta?.content;
+            if (content) {
+                res.write(content);
+            }
+        }
+
+        return res.end();
+    } catch (error) {
+        console.error("OpenRouter request failed:", error);
+
+        if (res.headersSent) {
+            return res.end();
+        }
+
+        return res.status(502).json({ error: "Unable to get a response from the model" });
+    }
 });
 
 // Append a message to the db chat history
