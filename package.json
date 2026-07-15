@@ -8,7 +8,9 @@
     "start": "tsx src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "reconcile:polar": "tsx --env-file=.env src/scripts/reconcilePolarOrders.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -38,7 +40,10 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }
