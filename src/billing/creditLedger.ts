@@ -6,7 +6,7 @@ import {
 } from "./model.js";
 import type {
   BillingUserDocument,
-  CreditChange,
+  CreditPurchase,
   CreditTransactionDocument,
 } from "./types.js";
 
@@ -41,10 +41,6 @@ export async function getOrCreateBillingUser(
     update,
     { upsert: true, returnDocument: "after", session },
   );
-}
-
-export async function getBillingUser(workosUserId: string, email?: string) {
-  return getOrCreateBillingUser(workosUserId, email);
 }
 
 export async function setPolarCustomerId(
@@ -86,46 +82,42 @@ export async function reserveCredits(
   const users = billingUsersCollection();
   const credits = Math.max(1, Math.trunc(requestedCredits));
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const user = await getOrCreateBillingUser(workosUserId);
+  await getOrCreateBillingUser(workosUserId);
+  const updated = await users.findOneAndUpdate(
+    {
+      workosUserId,
+      creditBalance: { $gte: credits },
+      "creditReservations.id": { $ne: reservationId },
+    },
+    {
+      $inc: { creditBalance: -credits },
+      $push: {
+        creditReservations: {
+          id: reservationId,
+          credits,
+          createdAt: new Date(),
+        },
+      },
+      $set: { updatedAt: new Date() },
+    },
+    { returnDocument: "after" },
+  );
 
-    if (!user || user.creditBalance < credits) {
-      throw new InsufficientCreditsError();
-    }
-
-    const existing = user.creditReservations?.find(
+  if (!updated) {
+    const existingUser = await users.findOne({
+      workosUserId,
+      "creditReservations.id": reservationId,
+    });
+    const existingReservation = existingUser?.creditReservations?.find(
       (reservation) => reservation.id === reservationId,
     );
-    if (existing) {
-      return existing.credits;
-    }
 
-    const updated = await users.findOneAndUpdate(
-      {
-        workosUserId,
-        creditBalance: { $gte: credits },
-        "creditReservations.id": { $ne: reservationId },
-      },
-      {
-        $inc: { creditBalance: -credits },
-        $push: {
-          creditReservations: {
-            id: reservationId,
-            credits,
-            createdAt: new Date(),
-          },
-        },
-        $set: { updatedAt: new Date() },
-      },
-      { returnDocument: "after" },
-    );
+    if (existingReservation) return existingReservation.credits;
 
-    if (updated) {
-      return credits;
-    }
+    throw new InsufficientCreditsError();
   }
 
-  throw new InsufficientCreditsError();
+  return credits;
 }
 
 export async function markCreditReservationPending(
@@ -313,13 +305,14 @@ export async function finalizeCreditReservation(input: {
   }
 }
 
-async function applyWithinTransaction(
-  change: CreditChange,
+/** Updates a balance and ledger atomically within the supplied transaction. */
+async function applyPurchaseWithinTransaction(
+  purchase: CreditPurchase,
   session: ClientSession,
 ) {
   const transactions = creditTransactionsCollection();
   const existing = await transactions.findOne(
-    { externalId: change.externalId },
+    { externalId: purchase.externalId },
     { session },
   );
 
@@ -327,50 +320,28 @@ async function applyWithinTransaction(
     return { transaction: existing, applied: false };
   }
 
-  await getOrCreateBillingUser(change.workosUserId, undefined, session);
-
-  const isUsage = change.type === "usage";
-  const debit = change.creditDelta < 0 ? Math.abs(change.creditDelta) : 0;
-  const userFilter =
-    debit > 0
-      ? {
-          workosUserId: change.workosUserId,
-          creditBalance: { $gte: debit },
-        }
-      : { workosUserId: change.workosUserId };
-  const increments: Record<string, number> = {
-    creditBalance: change.creditDelta,
-  };
-
-  if (isUsage) {
-    increments.creditsUsed = debit;
-    increments.tokensUsed = change.tokens ?? 0;
-  }
+  await getOrCreateBillingUser(purchase.workosUserId, undefined, session);
 
   const updatedUser = await billingUsersCollection().findOneAndUpdate(
-    userFilter,
+    { workosUserId: purchase.workosUserId },
     {
-      $inc: increments,
+      $inc: { creditBalance: purchase.credits },
       $set: { updatedAt: new Date() },
     },
     { returnDocument: "after", session },
   );
 
-  if (!updatedUser) {
-    throw new InsufficientCreditsError();
-  }
+  if (!updatedUser) throw new Error("Unable to apply credit purchase");
 
   const transaction: CreditTransactionDocument = {
-    workosUserId: change.workosUserId,
-    type: change.type,
-    credits: change.creditDelta,
+    workosUserId: purchase.workosUserId,
+    type: "purchase",
+    credits: purchase.credits,
     balanceAfter: updatedUser.creditBalance,
-    description: change.description,
-    source: change.source,
-    externalId: change.externalId,
-    ...(change.tokens !== undefined ? { tokens: change.tokens } : {}),
-    ...(change.costUsd !== undefined ? { costUsd: change.costUsd } : {}),
-    ...(change.metadata ? { metadata: change.metadata } : {}),
+    description: purchase.description,
+    source: "polar",
+    externalId: purchase.externalId,
+    ...(purchase.metadata ? { metadata: purchase.metadata } : {}),
     createdAt: new Date(),
   };
   const result = await transactions.insertOne(transaction, { session });
@@ -381,31 +352,22 @@ async function applyWithinTransaction(
   };
 }
 
-export async function applyCreditChange(change: CreditChange) {
-  const isZeroTokenUsage =
-    change.type === "usage" &&
-    change.creditDelta === 0 &&
-    (change.tokens ?? 0) > 0;
-
-  if (
-    !Number.isInteger(change.creditDelta) ||
-    (change.creditDelta === 0 && !isZeroTokenUsage)
-  ) {
-    throw new Error(
-      "Credit changes must be non-zero integers unless recording free token usage",
-    );
+/** Applies a Polar credit purchase exactly once by external ID. */
+export async function applyCreditPurchase(purchase: CreditPurchase) {
+  if (!Number.isInteger(purchase.credits) || purchase.credits <= 0) {
+    throw new Error("Purchased credits must be a positive integer");
   }
 
   const session = mongoClient.startSession();
 
   try {
     return await session.withTransaction(() =>
-      applyWithinTransaction(change, session),
+      applyPurchaseWithinTransaction(purchase, session),
     );
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) {
       const existing = await creditTransactionsCollection().findOne({
-        externalId: change.externalId,
+        externalId: purchase.externalId,
       });
 
       if (existing) {

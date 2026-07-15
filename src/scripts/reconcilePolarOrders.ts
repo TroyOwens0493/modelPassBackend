@@ -2,7 +2,7 @@ import { Polar } from "@polar-sh/sdk";
 import { connectDb, mongoClient } from "../db.js";
 import { ensureBillingIndexes } from "../billing/model.js";
 import {
-  applyCreditChange,
+  applyCreditPurchase,
   setPolarCustomerId,
 } from "../billing/creditLedger.js";
 import {
@@ -41,12 +41,10 @@ try {
         continue;
       }
 
-      const result = await applyCreditChange({
+      const result = await applyCreditPurchase({
         workosUserId,
-        type: "purchase",
-        creditDelta: creditPackage.credits,
+        credits: creditPackage.credits,
         description: `${creditPackage.name} credit package`,
-        source: "polar",
         externalId: `polar:order:${order.id}`,
         metadata: {
           polarOrderId: order.id,

@@ -9,12 +9,12 @@ process.env.MONGODB_URI ??= "mongodb://127.0.0.1:27017/modelpass-test";
 process.env.POLAR_SERVER = "sandbox";
 
 const mocks = vi.hoisted(() => ({
-  getBillingUser: vi.fn(),
+  getOrCreateBillingUser: vi.fn(),
   getRecentCreditTransactions: vi.fn(),
 }));
 
 vi.mock("../src/billing/creditLedger.js", () => ({
-  getBillingUser: mocks.getBillingUser,
+  getOrCreateBillingUser: mocks.getOrCreateBillingUser,
   getRecentCreditTransactions: mocks.getRecentCreditTransactions,
 }));
 
@@ -31,7 +31,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getBillingUser.mockResolvedValue({
+  mocks.getOrCreateBillingUser.mockResolvedValue({
     workosUserId: "user_123",
     creditBalance: 475,
     creditsUsed: 25,
@@ -86,7 +86,7 @@ describe("billing routes", () => {
         balanceAfter: 500,
       }),
     ]);
-    expect(mocks.getBillingUser).toHaveBeenCalledWith(
+    expect(mocks.getOrCreateBillingUser).toHaveBeenCalledWith(
       "user_123",
       "user@example.com",
     );

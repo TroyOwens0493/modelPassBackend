@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     validateEvent: vi.fn(),
-    applyCreditChange: vi.fn(),
+    applyCreditPurchase: vi.fn(),
     setPolarCustomerId: vi.fn(),
     MockWebhookVerificationError,
   };
@@ -22,7 +22,7 @@ vi.mock("@polar-sh/sdk/webhooks", () => ({
 }));
 
 vi.mock("../src/billing/creditLedger.js", () => ({
-  applyCreditChange: mocks.applyCreditChange,
+  applyCreditPurchase: mocks.applyCreditPurchase,
   setPolarCustomerId: mocks.setPolarCustomerId,
 }));
 
@@ -34,7 +34,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.applyCreditChange.mockResolvedValue({
+  mocks.applyCreditPurchase.mockResolvedValue({
     applied: true,
     transaction: {},
   });
@@ -88,10 +88,10 @@ describe("polarWebhookHandler", () => {
     );
 
     expect(state.status).toBe(202);
-    expect(mocks.applyCreditChange).toHaveBeenCalledWith(
+    expect(mocks.applyCreditPurchase).toHaveBeenCalledWith(
       expect.objectContaining({
         workosUserId: "user_123",
-        creditDelta: 100,
+        credits: 100,
         externalId: "polar:order:order_123",
       }),
     );
@@ -103,7 +103,7 @@ describe("polarWebhookHandler", () => {
 
   it("reports duplicate paid orders as received but not applied", async () => {
     mocks.validateEvent.mockReturnValue(paidOrder());
-    mocks.applyCreditChange.mockResolvedValue({
+    mocks.applyCreditPurchase.mockResolvedValue({
       applied: false,
       transaction: {},
     });
@@ -128,7 +128,7 @@ describe("polarWebhookHandler", () => {
     );
 
     expect(state.status).toBe(422);
-    expect(mocks.applyCreditChange).not.toHaveBeenCalled();
+    expect(mocks.applyCreditPurchase).not.toHaveBeenCalled();
   });
 
   it("rejects invalid webhook signatures", async () => {
@@ -143,6 +143,6 @@ describe("polarWebhookHandler", () => {
     );
 
     expect(state.status).toBe(403);
-    expect(mocks.applyCreditChange).not.toHaveBeenCalled();
+    expect(mocks.applyCreditPurchase).not.toHaveBeenCalled();
   });
 });

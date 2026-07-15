@@ -47,19 +47,17 @@ beforeEach(() => {
   mocks.transactions.insertOne.mockResolvedValue({ insertedId: "transaction_1" });
 });
 
-describe("applyCreditChange", () => {
+describe("applyCreditPurchase", () => {
   it("does not apply a transaction whose external ID already exists", async () => {
     mocks.transactions.findOne.mockResolvedValue({
       externalId: "polar:order:123",
       credits: 100,
     });
 
-    const result = await ledger.applyCreditChange({
+    const result = await ledger.applyCreditPurchase({
       workosUserId: "user_123",
-      type: "purchase",
-      creditDelta: 100,
+      credits: 100,
       description: "Starter credit package",
-      source: "polar",
       externalId: "polar:order:123",
     });
 
@@ -68,49 +66,39 @@ describe("applyCreditChange", () => {
     expect(mocks.transactions.insertOne).not.toHaveBeenCalled();
   });
 
-  it("rejects a debit larger than the available balance", async () => {
-    mocks.users.findOneAndUpdate
-      .mockResolvedValueOnce({ workosUserId: "user_123", creditBalance: 1 })
-      .mockResolvedValueOnce(null);
-
+  it("rejects invalid purchase amounts", async () => {
     await expect(
-      ledger.applyCreditChange({
+      ledger.applyCreditPurchase({
         workosUserId: "user_123",
-        type: "usage",
-        creditDelta: -2,
-        description: "Model response",
-        source: "openrouter",
-        externalId: "openrouter:completion:123",
-        tokens: 100,
-        costUsd: 0.02,
+        credits: -2,
+        description: "Invalid credit package",
+        externalId: "polar:order:invalid",
       }),
-    ).rejects.toBeInstanceOf(ledger.InsufficientCreditsError);
+    ).rejects.toThrow("Purchased credits must be a positive integer");
 
+    expect(mocks.users.findOneAndUpdate).not.toHaveBeenCalled();
     expect(mocks.transactions.insertOne).not.toHaveBeenCalled();
   });
 
-  it("updates balance and inserts a matching ledger entry", async () => {
+  it("updates balance and inserts a matching purchase entry", async () => {
     mocks.users.findOneAndUpdate
       .mockResolvedValueOnce({ workosUserId: "user_123", creditBalance: 10 })
-      .mockResolvedValueOnce({ workosUserId: "user_123", creditBalance: 8 });
+      .mockResolvedValueOnce({ workosUserId: "user_123", creditBalance: 110 });
 
-    const result = await ledger.applyCreditChange({
+    const result = await ledger.applyCreditPurchase({
       workosUserId: "user_123",
-      type: "usage",
-      creditDelta: -2,
-      description: "Model response",
-      source: "openrouter",
-      externalId: "openrouter:completion:123",
-      tokens: 100,
-      costUsd: 0.02,
+      credits: 100,
+      description: "Starter credit package",
+      externalId: "polar:order:123",
     });
 
     expect(result.applied).toBe(true);
     expect(mocks.transactions.insertOne).toHaveBeenCalledWith(
       expect.objectContaining({
-        credits: -2,
-        balanceAfter: 8,
-        tokens: 100,
+        type: "purchase",
+        credits: 100,
+        balanceAfter: 110,
+        source: "polar",
       }),
       expect.objectContaining({ session: mocks.session }),
     );
@@ -147,6 +135,28 @@ describe("applyCreditChange", () => {
       }),
       expect.objectContaining({ returnDocument: "after" }),
     );
+  });
+
+  it("returns an existing reservation without debiting credits again", async () => {
+    mocks.users.findOneAndUpdate
+      .mockResolvedValueOnce({ workosUserId: "user_123", creditBalance: 10 })
+      .mockResolvedValueOnce(null);
+    mocks.users.findOne.mockResolvedValue({
+      workosUserId: "user_123",
+      creditBalance: 0,
+      creditReservations: [
+        { id: "reservation_1", credits: 10, createdAt: new Date() },
+      ],
+    });
+
+    const reserved = await ledger.reserveCredits(
+      "user_123",
+      "reservation_1",
+      10,
+    );
+
+    expect(reserved).toBe(10);
+    expect(mocks.users.findOneAndUpdate).toHaveBeenCalledTimes(2);
   });
 
   it("refunds unused reservation credits and records actual usage", async () => {

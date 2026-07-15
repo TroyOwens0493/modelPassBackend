@@ -1,7 +1,7 @@
 import { app } from "./app.js";
 import { connectDb } from "./db.js";
 import { ensureBillingIndexes } from "./billing/model.js";
-import { reconcilePendingChatUsage } from "./routes/chats/chats.js";
+import { reconcilePendingOpenRouterUsage } from "./billing/openRouterUsage.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,7 +12,7 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
 
-void reconcilePendingChatUsage();
+void reconcilePendingOpenRouterUsage();
 setInterval(() => {
-    void reconcilePendingChatUsage();
+    void reconcilePendingOpenRouterUsage();
 }, 60_000).unref();

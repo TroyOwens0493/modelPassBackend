@@ -7,6 +7,14 @@ export type CreditTransactionType =
   | "adjustment"
   | "bonus";
 
+export interface CreditReservation {
+  id: string;
+  credits: number;
+  createdAt: Date;
+  completionId?: string;
+  model?: string;
+}
+
 export interface BillingUserDocument {
   _id?: ObjectId;
   workosUserId: string;
@@ -15,13 +23,7 @@ export interface BillingUserDocument {
   creditBalance: number;
   creditsUsed: number;
   tokensUsed: number;
-  creditReservations?: Array<{
-    id: string;
-    credits: number;
-    createdAt: Date;
-    completionId?: string;
-    model?: string;
-  }>;
+  creditReservations?: CreditReservation[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,14 +43,10 @@ export interface CreditTransactionDocument {
   createdAt: Date;
 }
 
-export type CreditChange = {
+export interface CreditPurchase {
   workosUserId: string;
-  type: CreditTransactionType;
-  creditDelta: number;
+  credits: number;
   description: string;
-  source: CreditTransactionDocument["source"];
   externalId: string;
-  tokens?: number;
-  costUsd?: number;
   metadata?: CreditTransactionDocument["metadata"];
-};
+}

@@ -8,7 +8,7 @@ import {
   isSandboxCheckout,
 } from "../billing/packages.js";
 import {
-  getBillingUser,
+  getOrCreateBillingUser,
   getRecentCreditTransactions,
 } from "../billing/creditLedger.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -20,7 +20,7 @@ billingRouter.use(requireAuth);
 billingRouter.get("/", async (req, res) => {
   const user = req.session!.user!;
   const [billingUser, transactions] = await Promise.all([
-    getBillingUser(user.id, user.email),
+    getOrCreateBillingUser(user.id, user.email),
     getRecentCreditTransactions(user.id),
   ]);
 
@@ -73,7 +73,7 @@ billingRouter.post("/checkout", async (req, res) => {
     return;
   }
 
-  await getBillingUser(user.id, user.email);
+  await getOrCreateBillingUser(user.id, user.email);
 
   const polar = new Polar({
     accessToken: process.env.POLAR_ACCESS_TOKEN!,

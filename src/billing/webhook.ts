@@ -3,7 +3,7 @@ import {
   validateEvent,
   WebhookVerificationError,
 } from "@polar-sh/sdk/webhooks";
-import { applyCreditChange, setPolarCustomerId } from "./creditLedger.js";
+import { applyCreditPurchase, setPolarCustomerId } from "./creditLedger.js";
 import { getCreditPackageByPolarProductId } from "./packages.js";
 
 function stringHeaders(req: Request) {
@@ -48,12 +48,10 @@ export async function polarWebhookHandler(req: Request, res: Response) {
       return;
     }
 
-    const result = await applyCreditChange({
+    const result = await applyCreditPurchase({
       workosUserId,
-      type: "purchase",
-      creditDelta: creditPackage.credits,
+      credits: creditPackage.credits,
       description: `${creditPackage.name} credit package`,
-      source: "polar",
       externalId: `polar:order:${order.id}`,
       metadata: {
         polarOrderId: order.id,
