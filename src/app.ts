@@ -7,6 +7,7 @@ import { billingRouter } from "./routes/billing.js";
 import { chatsRouter } from "./routes/chats/chats.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { cookiePassword } from "./workos.js";
+import { polarWebhookHandler } from "./billing/webhook.js";
 
 export const app: Express = express();
 
@@ -19,6 +20,13 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true, // Required for cookies
 }));
+
+// Polar signatures must be verified against the unparsed request body.
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  polarWebhookHandler,
+);
 
 // Body parsing
 app.use(express.json());

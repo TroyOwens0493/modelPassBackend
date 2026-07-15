@@ -7,21 +7,38 @@ import {
   isCheckoutConfigured,
   isSandboxCheckout,
 } from "../billing/packages.js";
+import {
+  getOrCreateBillingUser,
+  getRecentCreditTransactions,
+} from "../billing/creditLedger.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 
 export const billingRouter: RouterType = Router();
 
 billingRouter.use(requireAuth);
 
-billingRouter.get("/", (_req, res) => {
+billingRouter.get("/", async (req, res) => {
+  const user = req.session!.user!;
+  const [billingUser, transactions] = await Promise.all([
+    getOrCreateBillingUser(user.id, user.email),
+    getRecentCreditTransactions(user.id),
+  ]);
+
   res.json({
     balance: {
-      creditBalance: 0,
-      creditsUsed: 0,
-      tokensUsed: 0,
+      creditBalance: billingUser!.creditBalance,
+      creditsUsed: billingUser!.creditsUsed,
+      tokensUsed: billingUser!.tokensUsed,
     },
     packages: getPublicCreditPackages(),
-    transactions: [],
+    transactions: transactions.map((transaction) => ({
+      id: transaction._id!.toHexString(),
+      type: transaction.type,
+      credits: transaction.credits,
+      balanceAfter: transaction.balanceAfter,
+      description: transaction.description,
+      createdAt: transaction.createdAt.toISOString(),
+    })),
     fulfillmentEnabled: Boolean(process.env.POLAR_WEBHOOK_SECRET),
   });
 });
@@ -55,6 +72,8 @@ billingRouter.post("/checkout", async (req, res) => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
+
+  await getOrCreateBillingUser(user.id, user.email);
 
   const polar = new Polar({
     accessToken: process.env.POLAR_ACCESS_TOKEN!,

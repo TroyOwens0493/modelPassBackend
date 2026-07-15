@@ -38,6 +38,12 @@ export function getCreditPackage(packageId: string) {
   return creditPackages.find((creditPackage) => creditPackage.id === packageId);
 }
 
+export function getCreditPackageByPolarProductId(productId: string) {
+  return creditPackages.find(
+    (creditPackage) => creditPackage.polarProductId === productId,
+  );
+}
+
 export function isSandboxCheckout() {
   return process.env.POLAR_SERVER !== "production";
 }

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import { decodeJwt } from "jose";
 import { workos, clientId, redirectUri } from "../workos.js";
+import { getOrCreateBillingUser } from "../billing/creditLedger.js";
 
 // Extend Express Request to include session
 declare global {
@@ -89,6 +90,8 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
     if (!sessionId) {
       throw new Error("WorkOS access token did not include a session ID");
     }
+
+    await getOrCreateBillingUser(user.id, user.email);
 
     // Store session data in a secure cookie
     const sessionData = {

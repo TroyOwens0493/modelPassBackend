@@ -1,24 +1,13 @@
 import { Router, Request, Response } from "express";
 import { ObjectId } from "mongodb";
 import { chatsCollection } from "./model.js";
-import { OpenRouter } from '@openrouter/sdk';
 import type { ChatMessages } from "@openrouter/sdk/models";
 import type { Router as RouterType } from "express";
 import type { ChatMessage } from "./types.js";
+import { InsufficientCreditsError } from "../../billing/creditLedger.js";
+import { streamBillableCompletion } from "../../billing/openRouterUsage.js";
 
 export const chatsRouter: RouterType = Router();
-
-const OPEN_ROUTER_KEY = process.env.OPEN_ROUTER_API_KEY;
-
-if (!OPEN_ROUTER_KEY) {
-    throw new Error("OPENROUTER_API_KEY environment variable is required");
-}
-
-const client = new OpenRouter({
-    apiKey: OPEN_ROUTER_KEY,
-    httpReferer: 'modelpass.netlify.app',
-    appTitle: 'Model Pass'
-});
 
 /** Builds a query that limits a chat ID to the authenticated owner. */
 function getOwnedChatFilter(req: Request) {
@@ -74,6 +63,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
 // Stream a response from the model as plain UTF-8 text.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
     const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
+    const user = req.session!.user!;
 
     if (typeof model !== "string" || model.trim().length === 0) {
         return res.status(400).json({ error: "Invalid model" });
@@ -87,42 +77,32 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         role: msg.role === "model" ? "assistant" : msg.role,
         content: msg.text,
     }));
-    const abortController = new AbortController();
-
-    res.once("close", () => {
-        if (!res.writableEnded) {
-            abortController.abort();
-        }
-    });
-
     try {
-        const completion = await client.chat.send({
-            chatRequest: {
-                model,
-                messages: allMsgs,
-                stream: true
+        await streamBillableCompletion({
+            workosUserId: user.id,
+            model,
+            messages: allMsgs,
+            onStart: () => {
+                res.status(200);
+                res.setHeader("Content-Type", "text/plain; charset=utf-8");
+                res.setHeader("Cache-Control", "no-cache, no-transform");
+                res.setHeader("X-Content-Type-Options", "nosniff");
+                res.flushHeaders();
             },
-        }, { signal: abortController.signal });
-
-        res.status(200);
-        res.setHeader("Content-Type", "text/plain; charset=utf-8");
-        res.setHeader("Cache-Control", "no-cache, no-transform");
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.flushHeaders();
-
-        for await (const chunk of completion) {
-            if (res.destroyed) {
-                break;
-            }
-
-            const content = chunk.choices[0]?.delta?.content;
-            if (content) {
-                res.write(content);
-            }
-        }
+            onText: (content) => {
+                if (!res.destroyed) res.write(content);
+            },
+        });
 
         return res.end();
     } catch (error) {
+        if (error instanceof InsufficientCreditsError) {
+            return res.status(402).json({
+                error: "Your balance is too low for this request. Add credits to continue.",
+                code: "INSUFFICIENT_CREDITS",
+            });
+        }
+
         console.error("OpenRouter request failed:", error);
 
         if (res.headersSent) {
