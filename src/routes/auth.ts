@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import type { Router as RouterType } from "express";
+import type { CookieOptions, Router as RouterType } from "express";
 import { decodeJwt } from "jose";
 import { workos, clientId, redirectUri } from "../workos.js";
 import { getOrCreateBillingUser } from "../billing/creditLedger.js";
@@ -25,6 +25,19 @@ declare global {
 }
 
 export const authRouter: RouterType = Router();
+
+/** Returns session cookie settings for local or cross-site production requests. */
+function getSessionCookieOptions() {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    signed: true,
+  } satisfies CookieOptions;
+}
 
 /**
  * GET /auth/login
@@ -107,14 +120,7 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
       sessionId,
     };
 
-    // Set session cookie (httpOnly, secure in production)
-    res.cookie("workos_session", JSON.stringify(sessionData), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      signed: true,
-    });
+    res.cookie("workos_session", JSON.stringify(sessionData), getSessionCookieOptions());
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     res.redirect(`${frontendUrl}/chat`);
@@ -200,13 +206,7 @@ authRouter.patch("/me", (req: Request, res: Response) => {
     };
 
     session.user = updatedUser;
-    res.cookie("workos_session", JSON.stringify(session), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      signed: true,
-    });
+    res.cookie("workos_session", JSON.stringify(session), getSessionCookieOptions());
 
     res.json({ user: updatedUser });
   } catch {
