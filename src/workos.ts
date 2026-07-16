@@ -1,4 +1,5 @@
 import { WorkOS } from "@workos-inc/node";
+import { getWorkosRedirectUri } from "./config.js";
 
 if (!process.env.WORKOS_API_KEY) {
   throw new Error("WORKOS_API_KEY environment variable is required");
@@ -13,5 +14,7 @@ export const workos = new WorkOS(process.env.WORKOS_API_KEY, {
 });
 
 export const clientId = process.env.WORKOS_CLIENT_ID;
-export const redirectUri = process.env.WORKOS_REDIRECT_URI || "http://localhost:3000/auth/callback";
+// WorkOS returns through the frontend proxy so its session cookie belongs to
+// the same browser-facing origin as every subsequent API request.
+export const redirectUri = getWorkosRedirectUri();
 export const cookiePassword = process.env.WORKOS_COOKIE_PASSWORD;

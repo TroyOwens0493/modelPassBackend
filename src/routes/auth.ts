@@ -3,6 +3,7 @@ import type { Router as RouterType } from "express";
 import { decodeJwt } from "jose";
 import { workos, clientId, redirectUri } from "../workos.js";
 import { getOrCreateBillingUser } from "../billing/creditLedger.js";
+import { frontendUrl } from "../config.js";
 
 // Extend Express Request to include session
 declare global {
@@ -116,7 +117,6 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
       signed: true,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     res.redirect(`${frontendUrl}/chat`);
   } catch (error) {
     console.error("Error authenticating with WorkOS:", error);
@@ -129,8 +129,6 @@ async function logout(req: Request, res: Response) {
     const sessionCookie = req.signedCookies.workos_session;
 
     res.clearCookie("workos_session");
-
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
     if (sessionCookie) {
       const { sessionId } = JSON.parse(sessionCookie) as { sessionId?: string };
@@ -145,7 +143,6 @@ async function logout(req: Request, res: Response) {
   } catch (error) {
     console.error("Error during logout:", error);
     res.clearCookie("workos_session");
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     res.redirect(frontendUrl);
   }
 }

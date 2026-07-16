@@ -12,6 +12,7 @@ import {
   getRecentCreditTransactions,
 } from "../billing/creditLedger.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { frontendUrl } from "../config.js";
 
 export const billingRouter: RouterType = Router();
 
@@ -79,8 +80,6 @@ billingRouter.post("/checkout", async (req, res) => {
     accessToken: process.env.POLAR_ACCESS_TOKEN!,
     server: isSandboxCheckout() ? "sandbox" : "production",
   });
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-
   try {
     const checkout = await polar.checkouts.create({
       products: [creditPackage.polarProductId!],

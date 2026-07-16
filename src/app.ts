@@ -8,10 +8,11 @@ import { chatsRouter } from "./routes/chats/chats.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { cookiePassword } from "./workos.js";
 import { polarWebhookHandler } from "./billing/webhook.js";
+import { frontendUrl } from "./config.js";
 
 export const app: Express = express();
 
-const allowedOrigins = [process.env.CORS_ORIGIN, "http://localhost:5173", "http://localhost:3000"]
+const allowedOrigins = [process.env.CORS_ORIGIN, frontendUrl, "http://localhost:5173", "http://localhost:3000"]
   .filter(Boolean) as string[];
 
 // Security middleware
