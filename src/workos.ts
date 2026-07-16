@@ -13,5 +13,5 @@ export const workos = new WorkOS(process.env.WORKOS_API_KEY, {
 });
 
 export const clientId = process.env.WORKOS_CLIENT_ID;
-export const redirectUri = process.env.WORKOS_REDIRECT_URI || "http://localhost:3000/auth/callback";
-export const cookiePassword = process.env.WORKOS_COOKIE_PASSWORD;
+export const redirectUri = process.env.WORKOS_REDIRECT_URI || "http://localhost:3000/auth/token-callback";
+export const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";

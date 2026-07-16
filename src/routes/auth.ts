@@ -1,215 +1,137 @@
-import { Router, Request, Response } from "express";
-import type { CookieOptions, Router as RouterType } from "express";
-import { decodeJwt } from "jose";
-import { workos, clientId, redirectUri } from "../workos.js";
+import { Router } from "express";
+import type { Request, Response, Router as RouterType } from "express";
 import { getOrCreateBillingUser } from "../billing/creditLedger.js";
-
-// Extend Express Request to include session
-declare global {
-  namespace Express {
-    interface Request {
-      session?: {
-        user?: {
-          id: string;
-          email: string;
-          firstName: string | null;
-          lastName: string | null;
-          profilePictureUrl: string | null;
-        };
-        accessToken?: string;
-        refreshToken?: string;
-        sessionId?: string;
-      };
-    }
-  }
-}
+import {
+  getAuthUser,
+  syncAuthUser,
+  toPublicUser,
+  updateAuthUserPreferences,
+} from "../auth/model.js";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { clientId, frontendUrl, redirectUri, workos } from "../workos.js";
 
 export const authRouter: RouterType = Router();
 
-/** Returns session cookie settings for local or cross-site production requests. */
-function getSessionCookieOptions() {
-  const isProduction = process.env.NODE_ENV === "production";
+const statePattern = /^[A-Za-z0-9_-]{16,256}$/;
+
+authRouter.get("/authorize", (req: Request, res: Response) => {
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const screenHint = req.query.screen_hint === "sign-up" ? "sign-up" : "sign-in";
+
+  if (!statePattern.test(state)) {
+    res.status(400).json({ error: "A valid state nonce is required" });
+    return;
+  }
+
+  try {
+    res.redirect(workos.userManagement.getAuthorizationUrl({
+      provider: "authkit",
+      redirectUri,
+      clientId,
+      screenHint,
+      state,
+    }));
+  } catch {
+    console.error("Unable to initiate authentication");
+    res.status(500).json({ error: "Failed to initiate authentication" });
+  }
+});
+
+authRouter.get("/token-callback", (req: Request, res: Response) => {
+  const code = typeof req.query.code === "string" ? req.query.code : "";
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+
+  if (!code || !statePattern.test(state)) {
+    res.status(400).json({ error: "Authorization code and state are required" });
+    return;
+  }
+
+  const fragment = new URLSearchParams({ code, state });
+  res.redirect(`${frontendUrl}/auth/callback#${fragment}`);
+});
+
+async function persistAuthentication(response: Awaited<ReturnType<typeof workos.userManagement.authenticateWithCode>>) {
+  await Promise.all([
+    syncAuthUser(response.user),
+    getOrCreateBillingUser(response.user.id, response.user.email),
+  ]);
 
   return {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    signed: true,
-  } satisfies CookieOptions;
+    accessToken: response.accessToken,
+    refreshToken: response.refreshToken,
+    user: response.user,
+  };
 }
 
-/**
- * GET /auth/login
- * Redirects user to WorkOS AuthKit for authentication
- */
-authRouter.get("/login", async (_req: Request, res: Response) => {
-  try {
-    const authorizationUrl = workos.userManagement.getAuthorizationUrl({
-      provider: "authkit",
-      redirectUri,
-      clientId,
-      screenHint: "sign-in",
-    });
-
-    res.redirect(authorizationUrl);
-  } catch (error) {
-    console.error("Error generating authorization URL:", error);
-    res.status(500).json({ error: "Failed to initiate login" });
-  }
-});
-
-/**
- * GET /auth/signup
- * Redirects user to WorkOS AuthKit with the sign-up screen enabled.
- */
-authRouter.get("/signup", async (_req: Request, res: Response) => {
-  try {
-    const authorizationUrl = workos.userManagement.getAuthorizationUrl({
-      provider: "authkit",
-      redirectUri,
-      clientId,
-      screenHint: "sign-up",
-    });
-
-    res.redirect(authorizationUrl);
-  } catch (error) {
-    console.error("Error generating sign-up authorization URL:", error);
-    res.status(500).json({ error: "Failed to initiate sign-up" });
-  }
-});
-
-/**
- * GET /auth/callback
- * Handles OAuth callback from WorkOS AuthKit
- * Exchanges authorization code for user session
- */
-authRouter.get("/callback", async (req: Request, res: Response) => {
-  const code = req.query.code as string | undefined;
-
+authRouter.post("/exchange", async (req: Request, res: Response) => {
+  const code = typeof req.body?.code === "string" ? req.body.code : "";
   if (!code) {
     res.status(400).json({ error: "Authorization code is required" });
     return;
   }
 
   try {
-    const { user, accessToken, refreshToken } =
-      await workos.userManagement.authenticateWithCode({
-        code,
-        clientId,
-      });
-    const { sid: sessionId } = decodeJwt(accessToken);
+    const authentication = await workos.userManagement.authenticateWithCode({ code, clientId });
+    res.json(await persistAuthentication(authentication));
+  } catch {
+    console.error("Authorization code exchange failed");
+    res.status(401).json({ error: "Authorization code exchange failed", code: "INVALID_CODE" });
+  }
+});
 
-    if (!sessionId) {
-      throw new Error("WorkOS access token did not include a session ID");
-    }
+authRouter.post("/refresh", async (req: Request, res: Response) => {
+  const refreshToken = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
+  if (!refreshToken) {
+    res.status(400).json({ error: "Refresh token is required" });
+    return;
+  }
 
-    await getOrCreateBillingUser(user.id, user.email);
-
-    // Store session data in a secure cookie
-    const sessionData = {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profilePictureUrl: user.profilePictureUrl,
-      },
-      accessToken,
+  try {
+    const authentication = await workos.userManagement.authenticateWithRefreshToken({
       refreshToken,
-      sessionId,
-    };
-
-    res.cookie("workos_session", JSON.stringify(sessionData), getSessionCookieOptions());
-
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    res.redirect(`${frontendUrl}/chat`);
-  } catch (error) {
-    console.error("Error authenticating with WorkOS:", error);
-    res.status(500).json({ error: "Authentication failed" });
+      clientId,
+    });
+    res.json(await persistAuthentication(authentication));
+  } catch {
+    console.error("Token refresh failed");
+    res.status(401).json({ error: "Token refresh failed", code: "INVALID_REFRESH_TOKEN" });
   }
 });
 
-async function logout(req: Request, res: Response) {
+authRouter.post("/logout", requireAuth, async (req: Request, res: Response) => {
   try {
-    const sessionCookie = req.signedCookies.workos_session;
-
-    res.clearCookie("workos_session");
-
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-
-    if (sessionCookie) {
-      const { sessionId } = JSON.parse(sessionCookie) as { sessionId?: string };
-
-      if (sessionId) {
-        res.redirect(workos.userManagement.getLogoutUrl({ sessionId, returnTo: frontendUrl }));
-        return;
-      }
-    }
-
-    res.redirect(frontendUrl);
-  } catch (error) {
-    console.error("Error during logout:", error);
-    res.clearCookie("workos_session");
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    res.redirect(frontendUrl);
-  }
-}
-
-/**
- * Clears the local cookie, ends the WorkOS session, and returns to the frontend.
- */
-authRouter.post("/logout", logout);
-authRouter.get("/logout", logout);
-
-/**
- * GET /auth/me
- * Returns the current user's session data
- */
-authRouter.get("/me", (req: Request, res: Response) => {
-  const sessionCookie = req.signedCookies.workos_session;
-
-  if (!sessionCookie) {
-    res.status(401).json({ error: "Not authenticated", user: null });
-    return;
-  }
-
-  try {
-    const session = JSON.parse(sessionCookie);
-    res.json({ user: session.user });
+    await workos.userManagement.revokeSession({ sessionId: req.auth!.sessionId });
+    res.status(204).end();
   } catch {
-    res.status(401).json({ error: "Invalid session", user: null });
+    console.error("Session revocation failed");
+    res.status(502).json({ error: "Session revocation failed" });
   }
 });
 
-authRouter.patch("/me", (req: Request, res: Response) => {
-  const sessionCookie = req.signedCookies.workos_session;
-
-  if (!sessionCookie) {
-    res.status(401).json({ error: "Not authenticated", user: null });
+authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
+  const user = await getAuthUser(req.auth!.userId);
+  if (!user) {
+    res.status(404).json({ error: "User profile was not found" });
     return;
   }
 
-  try {
-    const session = JSON.parse(sessionCookie);
-    const { name, replyStyle, defaultModel } = req.body as {
-      name?: string;
-      replyStyle?: string;
-      defaultModel?: string;
-    };
+  res.json({ user: toPublicUser(user) });
+});
 
-    const updatedUser = {
-      ...session.user,
-      name: name?.trim() || session.user.firstName || session.user.email,
-      replyStyle: replyStyle ?? session.user.replyStyle ?? "balanced",
-      defaultModel: defaultModel ?? session.user.defaultModel ?? "openai/gpt-4o-mini",
-    };
+authRouter.patch("/me", requireAuth, async (req: Request, res: Response) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : undefined;
+  const replyStyle = typeof req.body?.replyStyle === "string" ? req.body.replyStyle : undefined;
+  const defaultModel = typeof req.body?.defaultModel === "string" ? req.body.defaultModel : undefined;
+  const user = await updateAuthUserPreferences(req.auth!.userId, {
+    ...(name ? { name } : {}),
+    ...(replyStyle ? { replyStyle } : {}),
+    ...(defaultModel ? { defaultModel } : {}),
+  });
 
-    session.user = updatedUser;
-    res.cookie("workos_session", JSON.stringify(session), getSessionCookieOptions());
-
-    res.json({ user: updatedUser });
-  } catch {
-    res.status(400).json({ error: "Unable to update profile" });
+  if (!user) {
+    res.status(404).json({ error: "User profile was not found" });
+    return;
   }
+
+  res.json({ user: toPublicUser(user) });
 });

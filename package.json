@@ -27,7 +27,6 @@
     "@openrouter/sdk": "^0.13.31",
     "@polar-sh/sdk": "^0.48.1",
     "@workos-inc/node": "^10.4.0",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -36,7 +35,6 @@
     "mongodb": "^7.3.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.0",

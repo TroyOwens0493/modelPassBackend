@@ -12,16 +12,18 @@ import {
   getRecentCreditTransactions,
 } from "../billing/creditLedger.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { getAuthUser } from "../auth/model.js";
 
 export const billingRouter: RouterType = Router();
 
 billingRouter.use(requireAuth);
 
 billingRouter.get("/", async (req, res) => {
-  const user = req.session!.user!;
+  const userId = req.auth!.userId;
+  const user = await getAuthUser(userId);
   const [billingUser, transactions] = await Promise.all([
-    getOrCreateBillingUser(user.id, user.email),
-    getRecentCreditTransactions(user.id),
+    getOrCreateBillingUser(userId, user?.email),
+    getRecentCreditTransactions(userId),
   ]);
 
   res.json({
@@ -66,14 +68,15 @@ billingRouter.post("/checkout", async (req, res) => {
     return;
   }
 
-  const user = req.session?.user;
+  const userId = req.auth!.userId;
+  const user = await getAuthUser(userId);
 
   if (!user) {
-    res.status(401).json({ error: "Not authenticated" });
+    res.status(404).json({ error: "User profile was not found" });
     return;
   }
 
-  await getOrCreateBillingUser(user.id, user.email);
+  await getOrCreateBillingUser(userId, user.email);
 
   const polar = new Polar({
     accessToken: process.env.POLAR_ACCESS_TOKEN!,
@@ -84,7 +87,7 @@ billingRouter.post("/checkout", async (req, res) => {
   try {
     const checkout = await polar.checkouts.create({
       products: [creditPackage.polarProductId!],
-      externalCustomerId: user.id,
+      externalCustomerId: userId,
       customerEmail: user.email,
       successUrl: `${frontendUrl}/credits?checkout=success&checkout_id={CHECKOUT_ID}`,
       returnUrl: `${frontendUrl}/credits?checkout=canceled`,

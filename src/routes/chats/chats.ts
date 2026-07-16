@@ -12,7 +12,7 @@ export const chatsRouter: RouterType = Router();
 /** Builds a query that limits a chat ID to the authenticated owner. */
 function getOwnedChatFilter(req: Request) {
     const { chatId } = req.params;
-    const userId = req.session?.user?.id;
+    const userId = req.auth?.userId;
 
     if (typeof chatId !== "string" || !ObjectId.isValid(chatId) || !userId) {
         return null;
@@ -26,13 +26,8 @@ chatsRouter.get("/", (_req: Request, res: Response) => {
 });
 
 // Returns the ids and titles for every chat owned by the authenticated user.
-chatsRouter.get("/all/:userId", async (req: Request, res: Response) => {
-    const { userId } = req.params;
-
-    if (typeof userId !== "string" || userId !== req.session?.user?.id) {
-        return res.status(404).json({ error: "Not found" });
-    }
-
+chatsRouter.get("/all", async (req: Request, res: Response) => {
+    const userId = req.auth!.userId;
     const chatsDb = chatsCollection();
     const chats = await chatsDb
         .find({ userId })
@@ -63,7 +58,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
 // Stream a response from the model as plain UTF-8 text.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
     const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
-    const user = req.session!.user!;
+    const userId = req.auth!.userId;
 
     if (typeof model !== "string" || model.trim().length === 0) {
         return res.status(400).json({ error: "Invalid model" });
@@ -79,7 +74,7 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
     }));
     try {
         await streamBillableCompletion({
-            workosUserId: user.id,
+            workosUserId: userId,
             model,
             messages: allMsgs,
             onStart: () => {
