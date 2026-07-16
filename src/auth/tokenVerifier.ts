@@ -24,8 +24,12 @@ export function createAccessTokenVerifier(options: {
       audience: options.audience,
     });
 
-    if (typeof payload.sub !== "string" || typeof payload.sid !== "string") {
-      throw new Error("Access token is missing required subject or session claims");
+    if (
+      typeof payload.exp !== "number" ||
+      typeof payload.sub !== "string" ||
+      typeof payload.sid !== "string"
+    ) {
+      throw new Error("Access token is missing required claims");
     }
 
     return { userId: payload.sub, sessionId: payload.sid };
@@ -52,4 +56,3 @@ export function verifyAccessToken(token: string) {
 export function isExpiredTokenError(error: unknown) {
   return error instanceof joseErrors.JWTExpired;
 }
-

@@ -21,15 +21,15 @@ beforeAll(async () => {
   });
 });
 
-async function token(overrides: { issuer?: string; audience?: string; expiresAt?: string; sub?: string; sid?: string } = {}) {
-  return new SignJWT({ sid: overrides.sid ?? "session_123" })
+async function token(overrides: { issuer?: string; audience?: string; expiresAt?: string; sub?: string; sid?: string; omitExpiration?: boolean } = {}) {
+  const jwt = new SignJWT({ sid: overrides.sid ?? "session_123" })
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer(overrides.issuer ?? issuer)
     .setAudience(overrides.audience ?? audience)
     .setSubject(overrides.sub ?? "user_123")
-    .setIssuedAt()
-    .setExpirationTime(overrides.expiresAt ?? "5m")
-    .sign(privateKey);
+    .setIssuedAt();
+  if (!overrides.omitExpiration) jwt.setExpirationTime(overrides.expiresAt ?? "5m");
+  return jwt.sign(privateKey);
 }
 
 function testApp() {
@@ -67,6 +67,12 @@ describe("bearer authentication", () => {
     const response = await request(testApp()).get("/protected").set("Authorization", `Bearer ${await token({ expiresAt: "0s" })}`);
     expect(response.status).toBe(401);
     expect(response.body.code).toBe("TOKEN_EXPIRED");
+  });
+
+  it("rejects tokens without an expiration claim", async () => {
+    const response = await request(testApp()).get("/protected").set("Authorization", `Bearer ${await token({ omitExpiration: true })}`);
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe("INVALID_TOKEN");
   });
 
   it.each([
