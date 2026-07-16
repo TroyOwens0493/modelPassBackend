@@ -5,8 +5,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createAccessTokenVerifier } from "../src/auth/tokenVerifier.js";
 import { createRequireAuth } from "../src/middleware/requireAuth.js";
 
-const issuer = "https://modelpass-test.authkit.app";
-const audience = "client_test";
+const issuer = "https://api.workos.com/";
+const clientId = "client_test";
 let privateKey: CryptoKey;
 let verifier: ReturnType<typeof createAccessTokenVerifier>;
 
@@ -16,16 +16,15 @@ beforeAll(async () => {
   const publicJwk = await exportJWK(pair.publicKey);
   verifier = createAccessTokenVerifier({
     issuer,
-    audience,
+    clientId,
     keySet: createLocalJWKSet({ keys: [{ ...publicJwk, kid: "test-key", alg: "RS256" }] }),
   });
 });
 
-async function token(overrides: { issuer?: string; audience?: string; expiresAt?: string; sub?: string; sid?: string; omitExpiration?: boolean } = {}) {
-  const jwt = new SignJWT({ sid: overrides.sid ?? "session_123" })
+async function token(overrides: { issuer?: string; clientId?: string; expiresAt?: string; sub?: string; sid?: string; omitExpiration?: boolean } = {}) {
+  const jwt = new SignJWT({ sid: overrides.sid ?? "session_123", client_id: overrides.clientId ?? clientId })
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer(overrides.issuer ?? issuer)
-    .setAudience(overrides.audience ?? audience)
     .setSubject(overrides.sub ?? "user_123")
     .setIssuedAt();
   if (!overrides.omitExpiration) jwt.setExpirationTime(overrides.expiresAt ?? "5m");
@@ -54,9 +53,9 @@ describe("bearer authentication", () => {
 
   it("returns INVALID_TOKEN for a token signed by an untrusted key", async () => {
     const rogueKey = (await generateKeyPair("RS256")).privateKey;
-    const rogueToken = await new SignJWT({ sid: "session_123" })
+    const rogueToken = await new SignJWT({ sid: "session_123", client_id: clientId })
       .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setIssuer(issuer).setAudience(audience).setSubject("user_123")
+      .setIssuer(issuer).setSubject("user_123")
       .setIssuedAt().setExpirationTime("5m").sign(rogueKey);
     const response = await request(testApp()).get("/protected").set("Authorization", `Bearer ${rogueToken}`);
     expect(response.status).toBe(401);
@@ -77,7 +76,7 @@ describe("bearer authentication", () => {
 
   it.each([
     ["issuer", { issuer: "https://wrong.authkit.app" }],
-    ["audience", { audience: "wrong_client" }],
+    ["client ID", { clientId: "wrong_client" }],
   ])("rejects the wrong %s", async (_label, overrides) => {
     const response = await request(testApp()).get("/protected").set("Authorization", `Bearer ${await token(overrides)}`);
     expect(response.status).toBe(401);

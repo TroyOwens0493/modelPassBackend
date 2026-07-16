@@ -1,6 +1,5 @@
 import { Router } from "express";
 import type { Request, Response, Router as RouterType } from "express";
-import { getOrCreateBillingUser } from "../billing/creditLedger.js";
 import {
   getAuthUser,
   syncAuthUser,
@@ -51,10 +50,7 @@ authRouter.get("/token-callback", (req: Request, res: Response) => {
 });
 
 async function persistAuthentication(response: Awaited<ReturnType<typeof workos.userManagement.authenticateWithCode>>) {
-  await Promise.all([
-    syncAuthUser(response.user),
-    getOrCreateBillingUser(response.user.id, response.user.email),
-  ]);
+  await syncAuthUser(response.user);
 
   return {
     accessToken: response.accessToken,

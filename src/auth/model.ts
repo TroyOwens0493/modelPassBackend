@@ -1,29 +1,19 @@
 import type { User } from "@workos-inc/node";
-import { db } from "../db.js";
-
-export type AuthUserDocument = {
-  workosUserId: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  profilePictureUrl: string | null;
-  name?: string;
-  replyStyle?: string;
-  defaultModel?: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-function authUsersCollection() {
-  return db().collection<AuthUserDocument>("authUsers");
-}
+import { billingUsersCollection } from "../billing/model.js";
+import type { BillingUserDocument } from "../billing/types.js";
 
 export async function syncAuthUser(user: User) {
   const now = new Date();
-  return authUsersCollection().findOneAndUpdate(
+  return billingUsersCollection().findOneAndUpdate(
     { workosUserId: user.id },
     {
-      $setOnInsert: { workosUserId: user.id, createdAt: now },
+      $setOnInsert: {
+        workosUserId: user.id,
+        creditBalance: 0,
+        creditsUsed: 0,
+        tokensUsed: 0,
+        createdAt: now,
+      },
       $set: {
         email: user.email,
         firstName: user.firstName,
@@ -37,7 +27,7 @@ export async function syncAuthUser(user: User) {
 }
 
 export function getAuthUser(workosUserId: string) {
-  return authUsersCollection().findOne({ workosUserId });
+  return billingUsersCollection().findOne({ workosUserId });
 }
 
 export async function updateAuthUserPreferences(
@@ -48,14 +38,14 @@ export async function updateAuthUserPreferences(
     Object.entries(preferences).filter(([, value]) => typeof value === "string"),
   );
 
-  return authUsersCollection().findOneAndUpdate(
+  return billingUsersCollection().findOneAndUpdate(
     { workosUserId },
     { $set: { ...update, updatedAt: new Date() } },
     { returnDocument: "after" },
   );
 }
 
-export function toPublicUser(user: AuthUserDocument) {
+export function toPublicUser(user: BillingUserDocument) {
   return {
     id: user.workosUserId,
     email: user.email,
@@ -67,4 +57,3 @@ export function toPublicUser(user: AuthUserDocument) {
     defaultModel: user.defaultModel ?? "openai/gpt-4o-mini",
   };
 }
-

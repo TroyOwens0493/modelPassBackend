@@ -19,6 +19,12 @@ export interface BillingUserDocument {
   _id?: ObjectId;
   workosUserId: string;
   email?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  profilePictureUrl?: string | null;
+  name?: string;
+  replyStyle?: string;
+  defaultModel?: string;
   polarCustomerId?: string;
   creditBalance: number;
   creditsUsed: number;

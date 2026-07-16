@@ -78,7 +78,7 @@ describe("bearer auth routes", () => {
     expect(response.body).toEqual(authentication);
     expect(mocks.authenticateWithCode).toHaveBeenCalledWith({ code: "one_use_code", clientId: "client_test" });
     expect(mocks.syncAuthUser).toHaveBeenCalledWith(authentication.user);
-    expect(mocks.getOrCreateBillingUser).toHaveBeenCalledWith("user_123", "user@example.com");
+    expect(mocks.getOrCreateBillingUser).not.toHaveBeenCalled();
   });
 
   it("returns and persists the rotated refresh token", async () => {

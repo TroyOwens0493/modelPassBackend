@@ -10,24 +10,25 @@ export type AccessTokenVerifier = (token: string) => Promise<AuthPrincipal>;
 
 export function createAccessTokenVerifier(options: {
   issuer: string;
-  audience: string;
+  clientId: string;
+  jwksUrl?: string;
   keySet?: JWTVerifyGetKey;
 }): AccessTokenVerifier {
-  const issuer = options.issuer.replace(/\/$/, "");
+  const issuer = options.issuer.endsWith("/") ? options.issuer : `${options.issuer}/`;
   const keySet = options.keySet ?? createRemoteJWKSet(
-    new URL(`${issuer}/oauth2/jwks`),
+    new URL(options.jwksUrl ?? `${issuer}sso/jwks/${options.clientId}`),
   );
 
   return async (token) => {
     const { payload } = await jwtVerify(token, keySet, {
       issuer,
-      audience: options.audience,
     });
 
     if (
       typeof payload.exp !== "number" ||
       typeof payload.sub !== "string" ||
-      typeof payload.sid !== "string"
+      typeof payload.sid !== "string" ||
+      payload.client_id !== options.clientId
     ) {
       throw new Error("Access token is missing required claims");
     }
@@ -40,14 +41,14 @@ let configuredVerifier: AccessTokenVerifier | undefined;
 
 export function verifyAccessToken(token: string) {
   if (!configuredVerifier) {
-    const issuer = process.env.WORKOS_JWT_ISSUER;
-    const audience = process.env.WORKOS_CLIENT_ID;
+    const issuer = process.env.WORKOS_JWT_ISSUER ?? "https://api.workos.com/";
+    const clientId = process.env.WORKOS_CLIENT_ID;
 
-    if (!issuer || !audience) {
-      throw new Error("WORKOS_JWT_ISSUER and WORKOS_CLIENT_ID are required");
+    if (!clientId) {
+      throw new Error("WORKOS_CLIENT_ID is required");
     }
 
-    configuredVerifier = createAccessTokenVerifier({ issuer, audience });
+    configuredVerifier = createAccessTokenVerifier({ issuer, clientId });
   }
 
   return configuredVerifier(token);
