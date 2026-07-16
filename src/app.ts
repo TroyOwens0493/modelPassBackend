@@ -9,6 +9,7 @@ import { requireAuth } from "./middleware/requireAuth.js";
 import { cookiePassword } from "./workos.js";
 import { polarWebhookHandler } from "./billing/webhook.js";
 import { frontendUrl } from "./config.js";
+import { modelsRouter } from "./routes/models.js";
 
 export const app: Express = express();
 
@@ -53,6 +54,9 @@ app.use("/chats", requireAuth, chatsRouter);
 
 // Billing routes (/api/billing, /api/billing/checkout)
 app.use("/api/billing", billingRouter);
+
+// Selectable OpenRouter text models.
+app.use("/api/models", requireAuth, modelsRouter);
 
 // Home route - shows auth status
 app.get("/", (req, res) => {

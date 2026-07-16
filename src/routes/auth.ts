@@ -2,8 +2,15 @@ import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import { decodeJwt } from "jose";
 import { workos, clientId, redirectUri } from "../workos.js";
-import { getOrCreateBillingUser } from "../billing/creditLedger.js";
+import {
+  getOrCreateBillingUser,
+  setDefaultModel,
+} from "../billing/creditLedger.js";
 import { frontendUrl } from "../config.js";
+import {
+  DEFAULT_MODEL,
+  isSelectableModel,
+} from "../models/catalog.js";
 
 // Extend Express Request to include session
 declare global {
@@ -16,6 +23,9 @@ declare global {
           firstName: string | null;
           lastName: string | null;
           profilePictureUrl: string | null;
+          name?: string;
+          replyStyle?: string;
+          defaultModel?: string;
         };
         accessToken?: string;
         refreshToken?: string;
@@ -92,7 +102,7 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
       throw new Error("WorkOS access token did not include a session ID");
     }
 
-    await getOrCreateBillingUser(user.id, user.email);
+    const userDocument = await getOrCreateBillingUser(user.id, user.email);
 
     // Store session data in a secure cookie
     const sessionData = {
@@ -102,6 +112,7 @@ authRouter.get("/callback", async (req: Request, res: Response) => {
         firstName: user.firstName,
         lastName: user.lastName,
         profilePictureUrl: user.profilePictureUrl,
+        defaultModel: userDocument?.defaultModel ?? DEFAULT_MODEL,
       },
       accessToken,
       refreshToken,
@@ -157,7 +168,7 @@ authRouter.get("/logout", logout);
  * GET /auth/me
  * Returns the current user's session data
  */
-authRouter.get("/me", (req: Request, res: Response) => {
+authRouter.get("/me", async (req: Request, res: Response) => {
   const sessionCookie = req.signedCookies.workos_session;
 
   if (!sessionCookie) {
@@ -167,13 +178,22 @@ authRouter.get("/me", (req: Request, res: Response) => {
 
   try {
     const session = JSON.parse(sessionCookie);
-    res.json({ user: session.user });
+    const userDocument = await getOrCreateBillingUser(
+      session.user.id,
+      session.user.email,
+    );
+    res.json({
+      user: {
+        ...session.user,
+        defaultModel: userDocument?.defaultModel ?? DEFAULT_MODEL,
+      },
+    });
   } catch {
     res.status(401).json({ error: "Invalid session", user: null });
   }
 });
 
-authRouter.patch("/me", (req: Request, res: Response) => {
+authRouter.patch("/me", async (req: Request, res: Response) => {
   const sessionCookie = req.signedCookies.workos_session;
 
   if (!sessionCookie) {
@@ -189,11 +209,33 @@ authRouter.patch("/me", (req: Request, res: Response) => {
       defaultModel?: string;
     };
 
+    if (defaultModel !== undefined) {
+      if (typeof defaultModel !== "string") {
+        res.status(400).json({ error: "Model is not available", user: null });
+        return;
+      }
+
+      try {
+        if (!(await isSelectableModel(defaultModel))) {
+          res.status(400).json({ error: "Model is not available", user: null });
+          return;
+        }
+      } catch (error) {
+        console.error("Unable to validate preferred model:", error);
+        res.status(503).json({ error: "Model catalog is unavailable", user: null });
+        return;
+      }
+    }
+
+    const persistedModel = defaultModel ?? session.user.defaultModel ?? DEFAULT_MODEL;
+    await getOrCreateBillingUser(session.user.id, session.user.email);
+    await setDefaultModel(session.user.id, persistedModel);
+
     const updatedUser = {
       ...session.user,
       name: name?.trim() || session.user.firstName || session.user.email,
       replyStyle: replyStyle ?? session.user.replyStyle ?? "balanced",
-      defaultModel: defaultModel ?? session.user.defaultModel ?? "openai/gpt-4o-mini",
+      defaultModel: persistedModel,
     };
 
     session.user = updatedUser;

@@ -9,6 +9,7 @@ import type {
   CreditPurchase,
   CreditTransactionDocument,
 } from "./types.js";
+import { DEFAULT_MODEL } from "../models/catalog.js";
 
 export class InsufficientCreditsError extends Error {
   constructor() {
@@ -28,6 +29,7 @@ export async function getOrCreateBillingUser(
       creditBalance: 0,
       creditsUsed: 0,
       tokensUsed: 0,
+      defaultModel: DEFAULT_MODEL,
       createdAt: now,
     },
     $set: {
@@ -57,6 +59,14 @@ export async function setPolarCustomerId(
       },
     },
     { session },
+  );
+}
+
+/** Persists the user's preferred model in the shared user document. */
+export async function setDefaultModel(workosUserId: string, defaultModel: string) {
+  await billingUsersCollection().updateOne(
+    { workosUserId },
+    { $set: { defaultModel, updatedAt: new Date() } },
   );
 }
 

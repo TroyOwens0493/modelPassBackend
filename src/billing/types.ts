@@ -23,6 +23,7 @@ export interface BillingUserDocument {
   creditBalance: number;
   creditsUsed: number;
   tokensUsed: number;
+  defaultModel: string;
   creditReservations?: CreditReservation[];
   createdAt: Date;
   updatedAt: Date;

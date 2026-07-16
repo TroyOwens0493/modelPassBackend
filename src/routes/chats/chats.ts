@@ -6,8 +6,22 @@ import type { Router as RouterType } from "express";
 import type { ChatDocument, ChatMessage, CreateChatBody } from "./types.js";
 import { InsufficientCreditsError } from "../../billing/creditLedger.js";
 import { streamBillableCompletion } from "../../billing/openRouterUsage.js";
+import { isSelectableModel } from "../../models/catalog.js";
 
 export const chatsRouter: RouterType = Router();
+
+/** Validates a model ID and reports catalog outages distinctly from bad input. */
+async function validateSelectableModel(model: string, res: Response) {
+    try {
+        if (await isSelectableModel(model)) return true;
+        res.status(400).json({ error: "Model is not available" });
+    } catch (error) {
+        console.error("Unable to validate model:", error);
+        res.status(503).json({ error: "Model catalog is unavailable" });
+    }
+
+    return false;
+}
 
 /** Builds a query that limits a chat ID to the authenticated owner. */
 function getOwnedChatFilter(req: Request) {
@@ -37,6 +51,8 @@ chatsRouter.post("/", async (req: Request, res: Response) => {
     if (typeof model !== "string" || model.trim().length === 0) {
         return res.status(400).json({ error: "Invalid model" });
     }
+
+    if (!(await validateSelectableModel(model, res))) return;
 
     const now = new Date();
     const chat: ChatDocument = {
@@ -97,6 +113,8 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
     if (typeof model !== "string" || model.trim().length === 0) {
         return res.status(400).json({ error: "Invalid model" });
     }
+
+    if (!(await validateSelectableModel(model, res))) return;
 
     if (!Array.isArray(messages)) {
         return res.status(400).json({ error: "Invalid messages" });

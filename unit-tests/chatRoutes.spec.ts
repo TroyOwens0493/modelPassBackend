@@ -9,10 +9,15 @@ process.env.OPEN_ROUTER_API_KEY ??= "test-openrouter-key";
 const mocks = vi.hoisted(() => ({
     insertOne: vi.fn(),
     findOneAndUpdate: vi.fn(),
+    isSelectableModel: vi.fn(),
 }));
 
 vi.mock("../src/routes/chats/model.js", () => ({
     chatsCollection: () => mocks,
+}));
+
+vi.mock("../src/models/catalog.js", () => ({
+    isSelectableModel: mocks.isSelectableModel,
 }));
 
 let app: express.Express;
@@ -38,6 +43,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isSelectableModel.mockResolvedValue(true);
 });
 
 describe("chat routes", () => {
@@ -93,5 +99,29 @@ describe("chat routes", () => {
             },
             { returnDocument: "after" },
         );
+    });
+
+    it("rejects a chat model outside the selectable catalog", async () => {
+        mocks.isSelectableModel.mockResolvedValue(false);
+
+        const response = await request(app)
+            .post("/chats")
+            .send({ title: "Image request", model: "image/only" });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe("Model is not available");
+        expect(mocks.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("reports a model catalog outage without treating it as invalid input", async () => {
+        mocks.isSelectableModel.mockRejectedValue(new Error("OpenRouter unavailable"));
+
+        const response = await request(app)
+            .post("/chats")
+            .send({ title: "Text request", model: "openai/gpt-4o-mini" });
+
+        expect(response.status).toBe(503);
+        expect(response.body.error).toBe("Model catalog is unavailable");
+        expect(mocks.insertOne).not.toHaveBeenCalled();
     });
 });
