@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { chatsCollection } from "./model.js";
 import type { ChatMessages } from "@openrouter/sdk/models";
 import type { Router as RouterType } from "express";
-import type { ChatMessage } from "./types.js";
+import type { ChatDocument, ChatMessage, CreateChatBody } from "./types.js";
 import { InsufficientCreditsError } from "../../billing/creditLedger.js";
 import { streamBillableCompletion } from "../../billing/openRouterUsage.js";
 
@@ -23,6 +23,35 @@ function getOwnedChatFilter(req: Request) {
 
 chatsRouter.get("/", (_req: Request, res: Response) => {
     res.status(404).json({ error: "Not found" });
+});
+
+// Creates an empty chat owned by the authenticated user.
+chatsRouter.post("/", async (req: Request, res: Response) => {
+    const { title, model } = req.body as Partial<CreateChatBody>;
+    const userId = req.session!.user!.id;
+
+    if (typeof title !== "string" || title.trim().length === 0) {
+        return res.status(400).json({ error: "Invalid title" });
+    }
+
+    if (typeof model !== "string" || model.trim().length === 0) {
+        return res.status(400).json({ error: "Invalid model" });
+    }
+
+    const now = new Date();
+    const chat: ChatDocument = {
+        userId,
+        title: title.trim(),
+        model,
+        messages: [],
+        tokensUsed: 0,
+        creditsUsed: 0,
+        createdAt: now,
+        updatedAt: now,
+    };
+    const result = await chatsCollection().insertOne(chat);
+
+    return res.status(201).json({ ...chat, _id: result.insertedId });
 });
 
 // Returns the ids and titles for every chat owned by the authenticated user.
@@ -126,11 +155,17 @@ chatsRouter.post("/addMessage/:chatId", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid message" });
     }
 
+    const storedMessage: ChatMessage = {
+        role: msg.role,
+        text: msg.text,
+        timestamp: new Date(),
+    };
+
     const chatsDb = chatsCollection();
     const updatedChat = await chatsDb.findOneAndUpdate(
         chatFilter,
         {
-            $push: { messages: msg },
+            $push: { messages: storedMessage },
             $set: { updatedAt: new Date() },
         },
         { returnDocument: "after" },

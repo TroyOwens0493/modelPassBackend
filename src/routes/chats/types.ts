@@ -21,7 +21,6 @@ export interface ChatDocument {
 }
 
 export interface CreateChatBody {
-    userId: string;
     title: string;
     model: string;
 }
