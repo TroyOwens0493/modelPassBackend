@@ -208,8 +208,8 @@ importers:
   .:
     dependencies:
       '@openrouter/sdk':
-        specifier: ^0.13.31
-        version: 0.13.59
+        specifier: 0.13.50
+        version: 0.13.50
       '@polar-sh/sdk':
         specifier: ^0.48.1
         version: 0.48.1
@@ -449,8 +449,8 @@ packages:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
 
-  '@openrouter/sdk@0.13.59':
-    resolution: {integrity: sha512-cQsewh5sctQAStPi1/1ExemjfvE9LZFcqZbukX4yOCP0gkbRKLjUzw53/PzYQAgyZp39L3acfmZF4O1hMGq4nA==}
+  '@openrouter/sdk@0.13.50':
+    resolution: {integrity: sha512-IkmX4jPEzNa70CH2WyYE7azmxiH+isvikvZGXoUU21CfLxDoOwi4iP58+I172/LsC27MKX2Nvkmuwhh8IpEjZw==}
 
   '@oxc-project/types@0.139.0':
     resolution: {integrity: sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw==}
@@ -1476,7 +1476,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@openrouter/sdk@0.13.59':
+  '@openrouter/sdk@0.13.50':
     dependencies:
       zod: 4.4.3
 
