@@ -9,6 +9,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "reconcile:polar": "tsx --env-file=.env src/scripts/reconcilePolarOrders.ts",
+    "prototype:balance-authorization": "tsx src/billing/balance-authorization.prototype/cli.ts",
     "test": "vitest run",
     "test:unit": "vitest run"
   },

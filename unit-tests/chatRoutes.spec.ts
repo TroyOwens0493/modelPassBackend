@@ -63,7 +63,6 @@ describe("chat routes", () => {
             model: "openai/gpt-4o-mini",
             messages: [],
             tokensUsed: 0,
-            creditsUsed: 0,
         }));
         expect(mocks.insertOne).toHaveBeenCalledWith(expect.objectContaining({
             userId: "user_123",

@@ -15,7 +15,6 @@ export interface ChatDocument {
     model: string;
     messages: ChatMessage[];
     tokensUsed: number;
-    creditsUsed: number;
     createdAt: Date;
     updatedAt: Date;
 }

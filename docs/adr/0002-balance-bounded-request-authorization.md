@@ -1,0 +1,3 @@
+# Bound each request to the Customer's Balance
+
+ModelPass will authorize only allowlisted text endpoints with a validated Request Budget, automatically reduce `max_completion_tokens` to the greatest useful output the Customer's exact Balance can cover, and atomically post that budget as a Hold before dispatch. Provider-enforced output limits are used instead of local streaming estimates because final Provider Cost is authoritative; disconnects retain the Hold until settlement, while a violated bound freezes the Customer, disables the endpoint, and requires reconciliation rather than creating debt or silently capping the charge.

@@ -1,163 +1,29 @@
+import { Decimal128 } from "mongodb";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-process.env.OPEN_ROUTER_API_KEY = "test-openrouter-key";
-
-const mocks = vi.hoisted(() => ({
-  modelsGet: vi.fn(),
-  chatSend: vi.fn(),
-  generationGet: vi.fn(),
-  creditsForCost: vi.fn(),
-  reserveCredits: vi.fn(),
-  markCreditReservationPending: vi.fn(),
-  finalizeCreditReservation: vi.fn(),
-  releaseCreditReservation: vi.fn(),
-  releaseExpiredUnlinkedReservations: vi.fn(),
-  getPendingCreditReservations: vi.fn(),
-}));
-
-vi.mock("@openrouter/sdk", () => ({
-  OpenRouter: class {
-    models = { get: mocks.modelsGet };
-    chat = { send: mocks.chatSend };
-    generations = { getGeneration: mocks.generationGet };
-  },
-}));
-
-vi.mock("../src/billing/creditLedger.js", () => ({
-  creditsForCost: mocks.creditsForCost,
-  reserveCredits: mocks.reserveCredits,
-  markCreditReservationPending: mocks.markCreditReservationPending,
-  finalizeCreditReservation: mocks.finalizeCreditReservation,
-  releaseCreditReservation: mocks.releaseCreditReservation,
-  releaseExpiredUnlinkedReservations: mocks.releaseExpiredUnlinkedReservations,
-  getPendingCreditReservations: mocks.getPendingCreditReservations,
-}));
-
-let streamBillableCompletion: typeof import("../src/billing/openRouterUsage.js").streamBillableCompletion;
-
-beforeAll(async () => {
-  ({ streamBillableCompletion } = await import(
-    "../src/billing/openRouterUsage.js"
-  ));
-});
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.modelsGet.mockResolvedValue({
-    data: {
-      pricing: { prompt: "0.000001", completion: "0.000002", request: "0" },
-    },
-  });
-  mocks.creditsForCost.mockImplementation((costUsd: number) =>
-    costUsd === 0.005 ? 1 : 10,
-  );
-  mocks.reserveCredits.mockResolvedValue(10);
-  mocks.markCreditReservationPending.mockResolvedValue(undefined);
-  mocks.finalizeCreditReservation.mockResolvedValue({ applied: true });
-  mocks.releaseCreditReservation.mockResolvedValue(undefined);
-});
-
-/** Produces a successful two-chunk OpenRouter stream. */
-async function* successfulCompletion() {
-  yield {
-    id: "completion_123",
-    choices: [{ delta: { content: "Hello" } }],
-  };
-  yield {
-    id: "completion_123",
-    choices: [{ delta: { content: " world" } }],
-    usage: {
-      cost: 0.005,
-      totalTokens: 12,
-      promptTokens: 5,
-      completionTokens: 7,
-    },
-  };
-}
-
-/** Produces one linked chunk before simulating an interrupted stream. */
-async function* interruptedCompletion() {
-  yield {
-    id: "completion_123",
-    choices: [{ delta: { content: "Partial" } }],
-  };
-  throw new Error("Stream interrupted");
-}
-
-describe("streamBillableCompletion", () => {
-  it("owns reservation, streaming, and final settlement", async () => {
-    mocks.chatSend.mockResolvedValue(successfulCompletion());
-    const onStart = vi.fn();
+process.env.OPEN_ROUTER_API_KEY = "test-key";
+process.env.WALLET_ENDPOINT_CONFIG = JSON.stringify({ version: "test-v1", endpoints: { "author/model": { provider: "Provider", promptPerToken: "0.000001", completionPerToken: "0.000002", requestCost: "0", maxOutputTokens: 128, fixedPromptTokens: 10, perMessageTokens: 4 } } });
+const mocks = vi.hoisted(() => ({ finalizeUsage: vi.fn(), getUser: vi.fn(), getPending: vi.fn(), linkHold: vi.fn(), ambiguous: vi.fn(), releaseHold: vi.fn(), reserveBalance: vi.fn(), flowFind: vi.fn(), flowUpdate: vi.fn(), generationGet: vi.fn() }));
+vi.mock("@openrouter/sdk", () => ({ OpenRouter: class { generations = { getGeneration: mocks.generationGet }; } }));
+vi.mock("../src/billing/balanceLedger.js", () => ({ finalizeUsage: mocks.finalizeUsage, getOrCreateBillingUser: mocks.getUser, getPendingUsageHolds: mocks.getPending, linkHold: mocks.linkHold, markAmbiguousUnlinkedHold: mocks.ambiguous, releaseHold: mocks.releaseHold, reserveBalance: mocks.reserveBalance, InsufficientBalanceError: class extends Error {} }));
+vi.mock("../src/billing/model.js", () => ({ flowControlsCollection: () => ({ findOne: mocks.flowFind, updateOne: mocks.flowUpdate }) }));
+let stream: typeof import("../src/billing/openRouterUsage.js").streamBillableCompletion;
+beforeAll(async () => ({ streamBillableCompletion: stream } = await import("../src/billing/openRouterUsage.js")));
+beforeEach(() => { vi.clearAllMocks(); mocks.getUser.mockResolvedValue({ balance: Decimal128.fromString("10") }); mocks.flowFind.mockResolvedValue(null); mocks.reserveBalance.mockResolvedValue(undefined); mocks.linkHold.mockResolvedValue(undefined); mocks.finalizeUsage.mockResolvedValue({ applied: true }); });
+const body = 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: {"choices":[],"usage":{"cost":0.00002,"total_tokens":12}}\n\ndata: [DONE]\n\n';
+describe("OpenRouter Balance dispatch", () => {
+  it("links the Hold from the response header before consuming streamed text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 200, headers: { "x-generation-id": "generation_1", "content-type": "text/event-stream" } })));
     const onText = vi.fn();
-
-    await streamBillableCompletion({
-      workosUserId: "user_123",
-      model: "author/model",
-      messages: [{ role: "user", content: "Hi" }],
-      onStart,
-      onText,
-    });
-
-    expect(mocks.reserveCredits).toHaveBeenCalledWith(
-      "user_123",
-      expect.any(String),
-      10,
-    );
-    expect(onStart).toHaveBeenCalledOnce();
-    expect(onText.mock.calls).toEqual([["Hello"], [" world"]]);
-    expect(mocks.markCreditReservationPending).toHaveBeenCalledWith(
-      "user_123",
-      expect.any(String),
-      "completion_123",
-      "author/model",
-    );
-    expect(mocks.finalizeCreditReservation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workosUserId: "user_123",
-        externalId: "completion_123",
-        requestedCredits: 1,
-        tokens: 12,
-        costUsd: 0.005,
-      }),
-    );
-    expect(mocks.releaseCreditReservation).not.toHaveBeenCalled();
+    await stream({ workosUserId: "user_1", model: "author/model", messages: [{ role: "user", content: "Hi" }], onStart: vi.fn(), onText });
+    expect(mocks.linkHold).toHaveBeenCalledWith("user_1", expect.any(String), "generation_1", "author/model");
+    expect(mocks.linkHold.mock.invocationCallOrder[0]).toBeLessThan(onText.mock.invocationCallOrder[0]);
+    expect(mocks.finalizeUsage).toHaveBeenCalledWith(expect.objectContaining({ generationId: "generation_1", providerCost: "0.00002", tokens: 12 }));
   });
-
-  it("releases an unlinked reservation when OpenRouter rejects the request", async () => {
-    mocks.chatSend.mockRejectedValue(new Error("OpenRouter unavailable"));
-
-    await expect(
-      streamBillableCompletion({
-        workosUserId: "user_123",
-        model: "author/model",
-        messages: [{ role: "user", content: "Hi" }],
-        onStart: vi.fn(),
-        onText: vi.fn(),
-      }),
-    ).rejects.toThrow("OpenRouter unavailable");
-
-    expect(mocks.releaseCreditReservation).toHaveBeenCalledWith(
-      "user_123",
-      expect.any(String),
-    );
-    expect(mocks.finalizeCreditReservation).not.toHaveBeenCalled();
-  });
-
-  it("keeps a linked reservation for reconciliation after stream failure", async () => {
-    mocks.chatSend.mockResolvedValue(interruptedCompletion());
-
-    await expect(
-      streamBillableCompletion({
-        workosUserId: "user_123",
-        model: "author/model",
-        messages: [{ role: "user", content: "Hi" }],
-        onStart: vi.fn(),
-        onText: vi.fn(),
-      }),
-    ).rejects.toThrow("Stream interrupted");
-
-    expect(mocks.markCreditReservationPending).toHaveBeenCalledOnce();
-    expect(mocks.releaseCreditReservation).not.toHaveBeenCalled();
-    expect(mocks.finalizeCreditReservation).not.toHaveBeenCalled();
+  it("retains the Hold and freezes billing when an accepted response has no generation ID", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+    await expect(stream({ workosUserId: "user_1", model: "author/model", messages: [{ role: "user", content: "Hi" }], onStart: vi.fn(), onText: vi.fn() })).rejects.toThrow(/generation ID/);
+    expect(mocks.ambiguous).toHaveBeenCalledWith("user_1", expect.any(String), "author/model");
+    expect(mocks.releaseHold).not.toHaveBeenCalled();
   });
 });
