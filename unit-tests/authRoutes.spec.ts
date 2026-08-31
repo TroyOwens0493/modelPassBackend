@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   isSelectableModel: vi.fn(),
 }));
 
-vi.mock("../src/billing/creditLedger.js", () => ({
+vi.mock("../src/billing/balanceLedger.js", () => ({
   getOrCreateBillingUser: mocks.getOrCreateBillingUser,
   setDefaultModel: mocks.setDefaultModel,
 }));

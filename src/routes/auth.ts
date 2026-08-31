@@ -5,7 +5,7 @@ import { workos, clientId, redirectUri } from "../workos.js";
 import {
   getOrCreateBillingUser,
   setDefaultModel,
-} from "../billing/creditLedger.js";
+} from "../billing/balanceLedger.js";
 import { frontendUrl } from "../config.js";
 import {
   DEFAULT_MODEL,

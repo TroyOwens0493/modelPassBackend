@@ -1,0 +1,3 @@
+# Preserve the prepaid Balance boundary through payment reversals
+
+ModelPass will allocate spending to Deposit value FIFO and track each Polar Order's remaining refundable value. Voluntary refunds reserve only unspent attributable value before Polar is called; disputes make the disputed Order's remaining value non-spendable; and a provider-forced refund or lost dispute removes only value still available. If the reversed Deposit was already spent, ModelPass records the remainder as a separate Payment Shortfall and freezes billing instead of creating a negative Balance or silently collecting it from a future Deposit. Original Ledger Entries remain immutable, and every provider transition is represented exactly once by a compensating entry or hold transition.

@@ -1,0 +1,3 @@
+# Use an immutable running-balance ledger
+
+ModelPass will serialize monetary events per Customer and record each as an immutable, idempotent Ledger Entry containing the resulting Balance; the newest committed entry is the customer-visible Balance. Holds reduce that Balance immediately, finalization captures a Usage Charge exactly once and atomically releases any unused amount, and mistakes are repaired only through reason-coded compensating entries that reference the original. This design was chosen over a mutable balance-only record so concurrent requests, retries, and reconciliation remain deterministic and auditable without permitting debt.

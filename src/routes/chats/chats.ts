@@ -4,7 +4,7 @@ import { chatsCollection } from "./model.js";
 import type { ChatMessages } from "@openrouter/sdk/models";
 import type { Router as RouterType } from "express";
 import type { ChatDocument, ChatMessage, CreateChatBody } from "./types.js";
-import { InsufficientCreditsError } from "../../billing/creditLedger.js";
+import { BillingFrozenError, InsufficientBalanceError } from "../../billing/balanceLedger.js";
 import { streamBillableCompletion } from "../../billing/openRouterUsage.js";
 import { isSelectableModel } from "../../models/catalog.js";
 
@@ -61,7 +61,6 @@ chatsRouter.post("/", async (req: Request, res: Response) => {
         model,
         messages: [],
         tokensUsed: 0,
-        creditsUsed: 0,
         createdAt: now,
         updatedAt: now,
     };
@@ -107,7 +106,7 @@ chatsRouter.get("/:chatId", async (req: Request, res: Response) => {
 
 // Stream a response from the model as plain UTF-8 text.
 chatsRouter.post("/response", async (req: Request, res: Response) => {
-    const { messages, model } = req.body as { messages?: ChatMessage[]; model?: string };
+    const { messages, model, maxCompletionTokens } = req.body as { messages?: ChatMessage[]; model?: string; maxCompletionTokens?: number };
     const user = req.session!.user!;
 
     if (typeof model !== "string" || model.trim().length === 0) {
@@ -124,11 +123,15 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
         role: msg.role === "model" ? "assistant" : msg.role,
         content: msg.text,
     }));
+    const upstreamAbort = new AbortController();
+    res.once("close", () => { if (!res.writableFinished) upstreamAbort.abort(); });
     try {
         await streamBillableCompletion({
             workosUserId: user.id,
             model,
             messages: allMsgs,
+            signal: upstreamAbort.signal,
+            requestedMaxCompletionTokens: maxCompletionTokens,
             onStart: () => {
                 res.status(200);
                 res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -143,12 +146,14 @@ chatsRouter.post("/response", async (req: Request, res: Response) => {
 
         return res.end();
     } catch (error) {
-        if (error instanceof InsufficientCreditsError) {
+        if (error instanceof InsufficientBalanceError) {
             return res.status(402).json({
-                error: "Your balance is too low for this request. Add credits to continue.",
-                code: "INSUFFICIENT_CREDITS",
+                error: "Your Balance is too low for this model's minimum response. Add funds to continue.",
+                code: "INSUFFICIENT_BALANCE",
             });
         }
+
+        if (error instanceof BillingFrozenError) return res.status(423).json({ error: error.message, code: "BILLING_FROZEN" });
 
         console.error("OpenRouter request failed:", error);
 
